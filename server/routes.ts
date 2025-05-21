@@ -632,6 +632,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
               if (businessName === savedName) return true;
             }
             
+            // Check location match (normalize locations)
+            if (business.location && savedBusiness.location) {
+              const normalizeLocation = (location: string) => {
+                return location.toLowerCase()
+                  // Remove apartment/suite numbers
+                  .replace(/(\s|,)+suite\s+\w+/i, '')
+                  .replace(/(\s|,)+ste\.?\s+\w+/i, '')
+                  .replace(/(\s|,)+apt\.?\s+\w+/i, '')
+                  .replace(/(\s|,)+unit\s+\w+/i, '')
+                  .replace(/(\s|,)+#\s*\w+/i, '')
+                  // Remove floor indicators
+                  .replace(/(\s|,)+floor\s+\w+/i, '')
+                  .replace(/(\s|,)+fl\.?\s+\w+/i, '')
+                  // Remove room numbers
+                  .replace(/(\s|,)+room\s+\w+/i, '')
+                  .replace(/(\s|,)+rm\.?\s+\w+/i, '')
+                  // Standardize address components
+                  .replace(/\bstreet\b/i, 'st')
+                  .replace(/\bavenue\b/i, 'ave')
+                  .replace(/\bboulevard\b/i, 'blvd')
+                  .replace(/\bsuite\b/i, 'ste')
+                  .trim();
+              };
+              
+              const businessLocation = normalizeLocation(business.location);
+              const savedLocation = normalizeLocation(savedBusiness.location);
+              
+              // Check if the core address matches
+              if (businessLocation === savedLocation) return true;
+              
+              // Attempt to extract city and state/zip if full match fails
+              const extractCityState = (location: string) => {
+                // Try to get city, state from address
+                const cityStateMatch = location.match(/([^,]+),\s*([^,]+)(?:,\s*([^,]+))?$/);
+                if (cityStateMatch) {
+                  const city = cityStateMatch[1]?.trim().toLowerCase();
+                  const state = cityStateMatch[2]?.trim().toLowerCase();
+                  return { city, state };
+                }
+                return { city: '', state: '' };
+              };
+              
+              const businessAddr = extractCityState(businessLocation);
+              const savedAddr = extractCityState(savedLocation);
+              
+              // If we have both city and state and they match, it's likely the same location
+              if (businessAddr.city && businessAddr.state && 
+                  businessAddr.city === savedAddr.city && 
+                  businessAddr.state === savedAddr.state) {
+                return true;
+              }
+            }
+            
             return false;
           });
           
