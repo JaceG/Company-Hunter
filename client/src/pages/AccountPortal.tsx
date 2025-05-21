@@ -51,16 +51,50 @@ export default function AccountPortal() {
     if (lines.length === 0) return [];
     
     // Get headers (first line)
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    let headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    
+    // If no headers found, use default headers
+    if (headers.length === 0) {
+      headers = ['name', 'website', 'location', 'distance', 'notes'];
+    }
     
     // Map to business objects
     const businesses: SavedBusiness[] = [];
     
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',');
+    // Start from index 1 (skip headers) unless there's only one line
+    const startIndex = lines.length === 1 ? 0 : 1;
+    
+    for (let i = startIndex; i < lines.length; i++) {
+      // Handle CSV with quotes and commas inside quotes
+      let values: string[] = [];
+      const line = lines[i];
+      let inQuotes = false;
+      let currentValue = '';
       
-      // Skip if not enough values
-      if (values.length < 2) continue;
+      // Parse CSV values properly (handling quotes)
+      for (let j = 0; j < line.length; j++) {
+        const char = line[j];
+        
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          values.push(currentValue.trim());
+          currentValue = '';
+        } else {
+          currentValue += char;
+        }
+      }
+      
+      // Add the last value
+      values.push(currentValue.trim());
+      
+      // If simple split didn't work, try again with basic split
+      if (values.length <= 1) {
+        values = line.split(',').map(v => v.trim());
+      }
+      
+      // Skip if not enough values (at least name)
+      if (values.length === 0) continue;
       
       const business: any = {
         userId: user?.userId || '',
@@ -68,21 +102,49 @@ export default function AccountPortal() {
         notes: '',
       };
       
-      // Map values to business properties
+      // Try to automatically detect columns if headers don't match expected ones
+      let nameIndex = headers.findIndex(h => h === 'name' || h.includes('company') || h.includes('business'));
+      let websiteIndex = headers.findIndex(h => h === 'website' || h.includes('site') || h.includes('url'));
+      let locationIndex = headers.findIndex(h => h === 'location' || h.includes('address') || h.includes('city'));
+      
+      // If columns aren't found, make an educated guess based on content
+      if (nameIndex === -1 && websiteIndex === -1) {
+        // Guess: first column is usually name, second is usually website
+        nameIndex = 0;
+        websiteIndex = 1; 
+        locationIndex = 2;
+      }
+      
+      // Try to set the business name
+      if (nameIndex >= 0 && values[nameIndex]) {
+        business.name = values[nameIndex];
+      } else if (values[0]) {
+        // Fallback: Use first column as name
+        business.name = values[0];
+      }
+      
+      // Try to set the website
+      if (websiteIndex >= 0 && values[websiteIndex]) {
+        business.website = values[websiteIndex];
+      } else if (values[1] && (values[1].includes('.com') || values[1].includes('http'))) {
+        // Fallback: Second column might be website if it looks like a URL
+        business.website = values[1];
+      }
+      
+      // Try to set the location
+      if (locationIndex >= 0 && values[locationIndex]) {
+        business.location = values[locationIndex];
+      }
+      
+      // Map any remaining values based on headers
       headers.forEach((header, index) => {
         if (values[index]) {
-          if (header === 'name') {
-            business.name = values[index].trim();
-          } else if (header === 'website') {
-            business.website = values[index].trim();
-          } else if (header === 'location') {
-            business.location = values[index].trim();
-          } else if (header === 'distance') {
-            business.distance = values[index].trim();
-          } else if (header === 'career link' || header === 'careerlink') {
-            business.careerLink = values[index].trim();
+          if (header === 'distance') {
+            business.distance = values[index];
+          } else if (header === 'career link' || header.includes('career')) {
+            business.careerLink = values[index];
           } else if (header === 'notes') {
-            business.notes = values[index].trim();
+            business.notes = values[index];
           }
         }
       });
@@ -93,6 +155,7 @@ export default function AccountPortal() {
       }
     }
     
+    console.log('Parsed businesses:', businesses); // Debug log
     return businesses;
   };
 
@@ -458,9 +521,9 @@ export default function AccountPortal() {
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction 
                       onClick={handleImportCSV} 
-                      disabled={!selectedFile || csvPreviewData.length === 0}
+                      disabled={!selectedFile}
                     >
-                      Import {csvPreviewData.length} Companies
+                      Import Companies
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
