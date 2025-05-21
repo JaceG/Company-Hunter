@@ -19,6 +19,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/account" component={AccountPortal} />
+      <Route path="/portal" component={AccountPortal} />
       <Route component={NotFound} />
     </Switch>
   );

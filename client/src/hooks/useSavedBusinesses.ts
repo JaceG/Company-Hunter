@@ -101,7 +101,7 @@ export function useClearAllSavedBusinesses() {
   
   return useMutation({
     mutationFn: async () => {
-      return await apiRequest("DELETE", "/api/my/businesses/all");
+      return await apiRequest("DELETE", "/api/my/clear-all-businesses");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/my/businesses"] });
