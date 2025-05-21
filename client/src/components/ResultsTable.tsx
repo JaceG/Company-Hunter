@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { Business } from "@/lib/types";
 import { useUpdateBusiness } from "@/hooks/useBusiness";
+import { useSavedBusinesses } from "@/hooks/useSavedBusinesses";
+import { AlertCircle } from "lucide-react";
 
 interface ResultsTableProps {
   businesses: Business[];
@@ -14,14 +16,66 @@ interface ResultsTableProps {
 export default function ResultsTable({ businesses, isLoading }: ResultsTableProps) {
   const [selectAll, setSelectAll] = useState(false);
   const [page, setPage] = useState(1);
+  const [businessesWithDuplicateFlags, setBusinessesWithDuplicateFlags] = useState<(Business & { isDuplicate?: boolean })[]>([]);
   const itemsPerPage = 10;
   const updateBusiness = useUpdateBusiness();
+  const { data: savedBusinesses, isLoading: isSavedBusinessesLoading } = useSavedBusinesses();
+  
+  // Function to check if a business is a duplicate in saved businesses
+  const checkForDuplicates = (business: Business) => {
+    if (!savedBusinesses || savedBusinesses.length === 0) return false;
+    
+    return savedBusinesses.some((savedBusiness: any) => {
+      // Check for website match (normalize domain)
+      if (business.website && savedBusiness.website) {
+        const normalizeUrl = (url: string) => {
+          return url.toLowerCase()
+            .replace(/^https?:\/\//i, '')
+            .replace(/^www\./i, '')
+            .replace(/\/+$/, '');
+        };
+        
+        const businessDomain = normalizeUrl(business.website);
+        const savedDomain = normalizeUrl(savedBusiness.website);
+        
+        if (businessDomain === savedDomain) return true;
+      }
+      
+      // Check for name match (normalize company names)
+      if (business.name && savedBusiness.name) {
+        const normalizeName = (name: string) => {
+          return name.toLowerCase()
+            .replace(/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i, '')
+            .trim();
+        };
+        
+        const businessName = normalizeName(business.name);
+        const savedName = normalizeName(savedBusiness.name);
+        
+        if (businessName === savedName) return true;
+      }
+      
+      return false;
+    });
+  };
+
+  // Mark duplicates in the business list whenever savedBusinesses changes
+  useEffect(() => {
+    if (!businesses || businesses.length === 0) return;
+    
+    const markedBusinesses = businesses.map(business => ({
+      ...business,
+      isDuplicate: checkForDuplicates(business)
+    }));
+    
+    setBusinessesWithDuplicateFlags(markedBusinesses);
+  }, [businesses, savedBusinesses]);
   
   // Calculate pagination
-  const totalPages = Math.ceil(businesses.length / itemsPerPage);
+  const totalPages = Math.ceil((businessesWithDuplicateFlags.length || businesses.length) / itemsPerPage);
   const startIndex = (page - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentBusinesses = businesses.slice(startIndex, endIndex);
+  const currentBusinesses = (businessesWithDuplicateFlags.length > 0 ? businessesWithDuplicateFlags : businesses).slice(startIndex, endIndex);
   
   // Handle select all checkbox
   const handleSelectAll = () => {
