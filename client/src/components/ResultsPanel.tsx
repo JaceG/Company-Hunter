@@ -1,6 +1,8 @@
 import { useState, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, 
   AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -22,11 +24,14 @@ interface ResultsPanelProps {
 export default function ResultsPanel({ businesses, isLoading, error, onRetry }: ResultsPanelProps) {
   const { toast } = useToast();
   const [copyButtonText, setCopyButtonText] = useState("Copy Data");
+  const [hideDuplicates, setHideDuplicates] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importFromSearch = useImportFromSearch();
   
-  // No duplicate filtering needed anymore
-  const filteredBusinesses = businesses;
+  // Filter out duplicates if the toggle is on
+  const filteredBusinesses = hideDuplicates 
+    ? businesses.filter(business => !business.isDuplicate)
+    : businesses;
   
   const handleDownloadCSV = () => {
     const csvContent = exportToCSV(filteredBusinesses);
@@ -154,6 +159,24 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
               </div>
             </div>
 
+            {/* Toggle to Hide Duplicates */}
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pt-4 border-t border-gray-100">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="hide-duplicates"
+                  checked={hideDuplicates}
+                  onCheckedChange={setHideDuplicates}
+                  disabled={isLoading || businesses.length === 0}
+                />
+                <Label htmlFor="hide-duplicates" className="text-sm font-medium text-gray-700 cursor-pointer">
+                  Hide Duplicate Companies
+                </Label>
+                <span className="text-xs text-gray-500">
+                  ({businesses.filter(b => b.isDuplicate).length} duplicates found)
+                </span>
+              </div>
+            </div>
+            
             {/* Add to My Company List Button */}
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pt-4 border-t border-gray-100">
               <div>
