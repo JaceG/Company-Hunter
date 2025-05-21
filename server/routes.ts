@@ -345,7 +345,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         replaceDuplicates
       };
       
-      const result = await importBusinessesForUser(userId, businessesToImport, importOptions);
+      const result = await importBusinessesForUser(userId, businessesToImport, {
+        skipDuplicates,
+        replaceDuplicates
+      });
       
       res.status(201).json({ 
         message: `Successfully imported ${result.count} businesses from CSV`,

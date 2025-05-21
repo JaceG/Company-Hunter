@@ -420,24 +420,153 @@ export async function getBusinessesForList(listId: string): Promise<SavedBusines
 // Import businesses from CSV for a specific user
 export async function importBusinessesForUser(
   userId: string, 
-  businesses: Array<Omit<SavedBusiness, 'userId' | 'createdAt' | 'updatedAt'>>
+  businesses: Array<Omit<SavedBusiness, 'userId' | 'createdAt' | 'updatedAt'>>,
+  options?: {
+    skipDuplicates?: boolean;
+    replaceDuplicates?: boolean;
+  }
 ): Promise<{ count: number; businesses: SavedBusiness[] }> {
   const database = await connectToMongoDB();
   const businessCollection = database.collection<SavedBusiness>(COLLECTIONS.SAVED_BUSINESSES);
 
+  // Default options
+  const { 
+    skipDuplicates = true, 
+    replaceDuplicates = false 
+  } = options || {};
+
+  // First, get existing businesses for this user to check for duplicates
+  const existingBusinesses = await businessCollection
+    .find({ userId })
+    .toArray();
+
+  // Check for duplicates by website or name
+  const businessesToProcess = businesses.filter(newBusiness => {
+    // If not checking for duplicates, include all
+    if (!skipDuplicates) {
+      return true;
+    }
+
+    // Look for duplicate by website first
+    const duplicateByWebsite = existingBusinesses.find(existing => {
+      if (!existing.website || !newBusiness.website) {
+        return false;
+      }
+      
+      // Normalize websites by removing protocol, www, and trailing slashes
+      const normalizedExisting = existing.website
+        .toLowerCase()
+        .replace(/^https?:\/\//i, '')
+        .replace(/^www\./i, '')
+        .replace(/\/+$/, '');
+        
+      const normalizedNew = newBusiness.website
+        .toLowerCase()
+        .replace(/^https?:\/\//i, '')
+        .replace(/^www\./i, '')
+        .replace(/\/+$/, '');
+        
+      return normalizedExisting === normalizedNew;
+    });
+
+    // If found duplicate by website
+    if (duplicateByWebsite) {
+      // If replacing duplicates, we'll handle it later
+      if (replaceDuplicates) {
+        return true;
+      }
+      // Otherwise skip this business
+      return false;
+    }
+
+    // Look for duplicate by name as fallback
+    const duplicateByName = existingBusinesses.find(existing => {
+      if (!existing.name || !newBusiness.name) {
+        return false;
+      }
+      
+      // Normalize names by lowercasing and removing common terms
+      const normalizedExisting = existing.name
+        .toLowerCase()
+        .replace(/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i, '');
+        
+      const normalizedNew = newBusiness.name
+        .toLowerCase()
+        .replace(/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i, '');
+        
+      return normalizedExisting === normalizedNew;
+    });
+
+    // If found duplicate by name
+    if (duplicateByName) {
+      // If replacing duplicates, we'll handle it later
+      if (replaceDuplicates) {
+        return true;
+      }
+      // Otherwise skip this business
+      return false;
+    }
+
+    // No duplicate found, include this business
+    return true;
+  });
+
   // Add userId and timestamps to all businesses
-  const businessesToInsert = businesses.map(business => ({
+  const businessesToInsert = businessesToProcess.map(business => ({
     ...business,
     userId,
     createdAt: new Date(),
     updatedAt: new Date()
   }));
 
+  // If there are no businesses to insert after filtering
+  if (businessesToInsert.length === 0) {
+    return {
+      count: 0,
+      businesses: []
+    };
+  }
+
+  // Handle replacing duplicates if needed
+  if (replaceDuplicates) {
+    // First delete any duplicates
+    for (const business of businessesToInsert) {
+      if (!business.website && !business.name) continue;
+      
+      // Build query to find duplicates
+      const query: any = { userId };
+      
+      if (business.website) {
+        // Normalize website for search
+        const normalizedWebsite = business.website
+          .toLowerCase()
+          .replace(/^https?:\/\//i, '')
+          .replace(/^www\./i, '')
+          .replace(/\/+$/, '');
+          
+        query.website = { 
+          $regex: new RegExp(`^(https?:\/\/)?(www\\.)?${normalizedWebsite.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\/?$`, 'i') 
+        };
+      } else if (business.name) {
+        // Normalize name for search
+        const normalizedName = business.name
+          .toLowerCase()
+          .replace(/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i, '');
+          
+        query.name = { 
+          $regex: new RegExp(`^${normalizedName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}(\\s*(inc|llc|ltd|corp|corporation)\\s*\\.?)?$`, 'i') 
+        };
+      }
+      
+      // Delete duplicates
+      await businessCollection.deleteMany(query);
+    }
+  }
+
   // Insert all businesses
   const result = await businessCollection.insertMany(businessesToInsert);
 
   // Get the inserted businesses with IDs
-  const insertedIds = Object.values(result.insertedIds).map(id => id.toString());
   const insertedObjectIds = Object.values(result.insertedIds);
   
   const insertedBusinesses = await businessCollection
