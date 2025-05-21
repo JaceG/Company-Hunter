@@ -8,8 +8,7 @@ export function useBusinessSearch() {
   
   return useMutation({
     mutationFn: async (searchParams: SearchParams): Promise<SearchResult> => {
-      const res = await apiRequest("POST", "/api/businesses/search", searchParams);
-      return res.json();
+      return await apiRequest("POST", "/api/businesses/search", searchParams);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/businesses"] });
@@ -30,8 +29,7 @@ export function useUpdateBusiness() {
   
   return useMutation({
     mutationFn: async ({ id, data }: { id: number; data: Partial<Business> }): Promise<Business> => {
-      const res = await apiRequest("PATCH", `/api/businesses/${id}`, data);
-      return res.json();
+      return await apiRequest("PATCH", `/api/businesses/${id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/businesses"] });
@@ -45,8 +43,7 @@ export function useImportBusinesses() {
   
   return useMutation({
     mutationFn: async (csvData: string): Promise<{ message: string; count: number }> => {
-      const res = await apiRequest("POST", "/api/businesses/compare", { csvData });
-      return res.json();
+      return await apiRequest("POST", "/api/businesses/compare", { csvData });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/businesses"] });
@@ -60,8 +57,7 @@ export function useClearDuplicates() {
   
   return useMutation({
     mutationFn: async (): Promise<{ message: string }> => {
-      const res = await apiRequest("POST", "/api/businesses/clear-duplicates", {});
-      return res.json();
+      return await apiRequest("POST", "/api/businesses/clear-duplicates", {});
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/businesses"] });
