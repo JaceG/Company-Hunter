@@ -27,23 +27,7 @@ export default function AccountPortal() {
   const logout = useLogout();
   const [, setLocation] = useLocation();
   
-  // Special mutation for loading Jace's sample data
-  const importSampleMutation = useMutation({
-    mutationFn: async () => {
-      // Fetch the CSV file content directly
-      const response = await fetch('/attached_assets/List of Companies - Sheet1.csv');
-      const csvData = await response.text();
-      
-      // Send it to our import endpoint
-      return await importFromCSVMutation.mutateAsync(csvData);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/my/businesses'] });
-    },
-    onError: (error) => {
-      console.error("Error importing sample data:", error);
-    }
-  });
+  // This was previously used for sample data mutation but we don't need it anymore
   
   const [searchTerm, setSearchTerm] = useState("");
   const [filterBadLeads, setFilterBadLeads] = useState(false);
@@ -97,72 +81,7 @@ export default function AccountPortal() {
     }
   };
   
-  // Handle import of sample data for Jace's account
-  const handleImportSampleData = async () => {
-    try {
-      // Create some sample companies directly (this bypasses file loading issues)
-      const sampleCompanies = [
-        { name: "6IXTH CITY MARKETING", website: "https://www.sixthcitymarketing.com/", careerLink: "https://www.sixthcitymarketing.com/careers/", location: "35 E Gay St, #324, Columbus, OH", isBadLead: false, notes: "" },
-        { name: "Smith Commerce", website: "https://smithcommerce.com/", careerLink: "https://smithcommerce.com/about/careers/", location: "555 Edgar Waldo Way Suite 401, Columbus, OH 43215", isBadLead: true, notes: "" },
-        { name: "Kow Abundant", website: "https://kowabundant.com/", careerLink: "https://kowabundant.com/columbus-marketing-jobs/", location: "1071 Fishinger Road STE 109, Columbus, Ohio 43221", isBadLead: false, notes: "" },
-        { name: "Third Street Digital", website: "https://thirdstreetdigital.com/", careerLink: "https://thirdstreetdigital.com/good-jobs/", location: "15 W Cherry St #401, Columbus, OH 43215", isBadLead: false, notes: "" },
-        { name: "Fuego Leads", website: "https://fuegoleads.io/", careerLink: "https://fuegoleads.io/careers-page/", location: "243 N 5th St, Columbus, OH 43215", isBadLead: false, notes: "" },
-        { name: "Mindstream Interactive", website: "https://www.fahlgrenmortine.com/", careerLink: "https://www.fahlgrenmortine.com/careers", location: "4030 Easton Station Suite 300, Columbus, OH 43219", isBadLead: false, notes: "" },
-        { name: "Postali LLC", website: "https://www.postali.com/", careerLink: "https://www.postali.com/careers/", location: "274 Marconi Blvd, Ste 220, Columbus, OH 43215", isBadLead: false, notes: "" },
-        { name: "Post House Creative", website: "https://posthouse.tv/", careerLink: "https://posthouse.tv/careers/", location: "52 E Lynn St, Columbus, OH 43215", isBadLead: false, notes: "" },
-        { name: "ZoCo Design", website: "https://zocodesign.com/", careerLink: "https://zocodesign.com/careers", location: "1027 W. 5th Ave, Columbus, OH 43212", isBadLead: false, notes: "" },
-        { name: "WillowTree", website: "https://www.willowtreeapps.com/", careerLink: "https://www.willowtreeapps.com/careers/jobs", location: "274 Marconi Blvd #300, Columbus, OH 43215", isBadLead: false, notes: "" }
-      ];
-      
-      // Format companies as a batch to import at once
-      const formattedCompanies = sampleCompanies.map(comp => ({
-        ...comp,
-        distance: comp.distance || '',
-        isDuplicate: false
-      }));
-      
-      try {
-        // Use the existing mutation to import businesses from search
-        await importFromSearchMutation.mutateAsync();
-        
-        // Refresh the list
-        queryClient.invalidateQueries({ queryKey: ['/api/my/businesses'] });
-        
-        toast({
-          title: "Your company list loaded!",
-          description: "Your personal company list has been imported successfully.",
-        });
-      } catch (innerError) {
-        console.error("Inner error:", innerError);
-        
-        // Fallback - try direct import
-        for (const business of formattedCompanies) {
-          await fetch('/api/my/businesses', {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(business)
-          });
-        }
-        
-        // Refresh the list
-        queryClient.invalidateQueries({ queryKey: ['/api/my/businesses'] });
-        
-        toast({
-          title: "Your company list loaded!",
-          description: "Your personal company list has been imported via fallback method.",
-        });
-      }
-    } catch (error) {
-      console.error("Error loading sample data:", error);
-      toast({
-        title: "Import failed",
-        description: "There was a problem loading your company list. Please try again.",
-        variant: "destructive"
-      });
-    }
-  };
+  // Standard import functions for all users
   
   // Handle updating a business
   const handleUpdateBusiness = async (id: string, updates: Partial<SavedBusiness>) => {
