@@ -601,7 +601,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Store the results for later retrieval
+      // Clear ALL previous search results before saving new ones
+      await storage.clearAllBusinesses();
+      
+      // Store the results for later retrieval (this will be the only results in storage)
       const savedBusinesses = await storage.saveBatchBusinesses(businesses);
       
       // For marking duplicates based on user's saved businesses
