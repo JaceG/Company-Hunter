@@ -1,9 +1,37 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertBusinessSchema, searchParamsSchema, importBusinessSchema, type ImportBusiness } from "@shared/schema";
+import { 
+  insertBusinessSchema, 
+  searchParamsSchema, 
+  importBusinessSchema, 
+  type ImportBusiness,
+  userSchema,
+  loginSchema,
+  savedBusinessSchema,
+  savedListSchema
+} from "@shared/schema";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
+import { 
+  connectToMongoDB, 
+  createUser, 
+  loginUser, 
+  getSavedBusinesses, 
+  saveBusiness, 
+  updateSavedBusiness, 
+  deleteSavedBusiness,
+  importBusinessesForUser,
+  getSavedLists,
+  createSavedList,
+  getSavedListById,
+  updateSavedList,
+  deleteSavedList,
+  addBusinessToList,
+  removeBusinessFromList,
+  getBusinessesForList
+} from './mongodb';
+import { authenticate, optionalAuth } from './middleware/auth';
 
 // Helper functions for comparing businesses
 function normalizeDomain(url: string): string {
@@ -32,12 +60,272 @@ function normalizeName(name: string): string {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Initialize MongoDB connection
+  try {
+    await connectToMongoDB();
+    console.log("MongoDB connection established");
+  } catch (error) {
+    console.error("Failed to connect to MongoDB:", error);
+  }
+
   // Google Places API endpoint
   const GOOGLE_PLACES_API_URL = "https://maps.googleapis.com/maps/api/place";
   const API_KEY = process.env.GOOGLE_PLACES_API_KEY || "";
 
   // Helper function to convert miles to meters for Google Places API
   const milesToMeters = (miles: number) => Math.round(miles * 1609.34);
+  
+  // Authentication routes
+  
+  // Register a new user
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const userData = userSchema.parse(req.body);
+      
+      const result = await createUser(userData);
+      
+      // Don't send password back to client
+      const { user } = result;
+      const userWithoutPassword = { ...user };
+      
+      if ('password' in userWithoutPassword) {
+        // @ts-ignore
+        delete userWithoutPassword.password;
+      }
+      
+      res.status(201).json({ 
+        user: userWithoutPassword, 
+        token: result.token 
+      });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
+      }
+      
+      console.error("Error registering user:", error);
+      
+      if (error.message === "Email already registered") {
+        return res.status(409).json({ message: "Email already registered" });
+      }
+      
+      res.status(500).json({ message: "An error occurred while registering user" });
+    }
+  });
+  
+  // Login user
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const loginData = loginSchema.parse(req.body);
+      
+      const result = await loginUser(loginData.email, loginData.password);
+      
+      // Don't send password back to client
+      const { user } = result;
+      const userWithoutPassword = { ...user };
+      
+      if ('password' in userWithoutPassword) {
+        // @ts-ignore
+        delete userWithoutPassword.password;
+      }
+      
+      res.json({ 
+        user: userWithoutPassword, 
+        token: result.token 
+      });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
+      }
+      
+      console.error("Error logging in:", error);
+      
+      if (error.message === "User not found" || error.message === "Invalid credentials") {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      
+      res.status(500).json({ message: "An error occurred while logging in" });
+    }
+  });
+  
+  // Get current user
+  app.get("/api/auth/user", authenticate, async (req, res) => {
+    try {
+      // User is already authenticated via middleware
+      res.json({ 
+        userId: req.user!.userId,
+        email: req.user!.email
+      });
+    } catch (error) {
+      console.error("Error getting user:", error);
+      res.status(500).json({ message: "An error occurred while fetching user" });
+    }
+  });
+  
+  // User's saved businesses endpoints
+  
+  // Get user's saved businesses
+  app.get("/api/my/businesses", authenticate, async (req, res) => {
+    try {
+      const userId = req.user!.userId;
+      const businesses = await getSavedBusinesses(userId);
+      res.json(businesses);
+    } catch (error) {
+      console.error("Error fetching saved businesses:", error);
+      res.status(500).json({ message: "An error occurred while fetching saved businesses" });
+    }
+  });
+  
+  // Save a new business to user's list
+  app.post("/api/my/businesses", authenticate, async (req, res) => {
+    try {
+      const userId = req.user!.userId;
+      const businessData = savedBusinessSchema.parse({
+        ...req.body,
+        userId
+      });
+      
+      const savedBusiness = await saveBusiness(businessData);
+      res.status(201).json(savedBusiness);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
+      }
+      
+      console.error("Error saving business:", error);
+      res.status(500).json({ message: "An error occurred while saving business" });
+    }
+  });
+  
+  // Update a saved business
+  app.patch("/api/my/businesses/:id", authenticate, async (req, res) => {
+    try {
+      const userId = req.user!.userId;
+      const businessId = req.params.id;
+      
+      // Make sure business belongs to this user
+      const business = await getSavedBusinessById(businessId);
+      if (!business) {
+        return res.status(404).json({ message: "Business not found" });
+      }
+      
+      if (business.userId !== userId) {
+        return res.status(403).json({ message: "You don't have permission to update this business" });
+      }
+      
+      const updates = req.body;
+      const updatedBusiness = await updateSavedBusiness(businessId, updates);
+      
+      res.json(updatedBusiness);
+    } catch (error) {
+      console.error("Error updating saved business:", error);
+      res.status(500).json({ message: "An error occurred while updating business" });
+    }
+  });
+  
+  // Delete a saved business
+  app.delete("/api/my/businesses/:id", authenticate, async (req, res) => {
+    try {
+      const userId = req.user!.userId;
+      const businessId = req.params.id;
+      
+      // Make sure business belongs to this user
+      const business = await getSavedBusinessById(businessId);
+      if (!business) {
+        return res.status(404).json({ message: "Business not found" });
+      }
+      
+      if (business.userId !== userId) {
+        return res.status(403).json({ message: "You don't have permission to delete this business" });
+      }
+      
+      const deleted = await deleteSavedBusiness(businessId);
+      
+      if (deleted) {
+        res.json({ message: "Business deleted successfully" });
+      } else {
+        res.status(500).json({ message: "Failed to delete business" });
+      }
+    } catch (error) {
+      console.error("Error deleting saved business:", error);
+      res.status(500).json({ message: "An error occurred while deleting business" });
+    }
+  });
+  
+  // Import businesses from search results
+  app.post("/api/my/businesses/import-from-search", authenticate, async (req, res) => {
+    try {
+      const userId = req.user!.userId;
+      
+      // Get the businesses from the search results
+      const searchBusinesses = await storage.getBusinesses();
+      
+      // Convert them to saved businesses format
+      const businessesToImport = searchBusinesses
+        .filter(b => !b.isBadLead) // Skip bad leads
+        .map(b => ({
+          name: b.name,
+          website: b.website || '',
+          location: b.location || '',
+          distance: b.distance || '',
+          isBadLead: false,
+          notes: b.notes || '',
+          careerLink: b.careerLink || '',
+          userId
+        }));
+      
+      if (businessesToImport.length === 0) {
+        return res.status(400).json({ message: "No valid businesses to import" });
+      }
+      
+      const result = await importBusinessesForUser(userId, businessesToImport);
+      
+      res.status(201).json({ 
+        message: `Successfully imported ${result.count} businesses`,
+        businesses: result.businesses
+      });
+    } catch (error) {
+      console.error("Error importing businesses:", error);
+      res.status(500).json({ message: "An error occurred while importing businesses" });
+    }
+  });
+  
+  // Import businesses from CSV
+  app.post("/api/my/businesses/import-from-csv", authenticate, async (req, res) => {
+    try {
+      const userId = req.user!.userId;
+      const { csvData } = req.body;
+      
+      if (!csvData) {
+        return res.status(400).json({ message: "CSV data is required" });
+      }
+      
+      // Parse CSV data
+      const csvBusinesses = parseCSV(csvData);
+      
+      if (csvBusinesses.length === 0) {
+        return res.status(400).json({ message: "No valid businesses found in CSV data" });
+      }
+      
+      // Convert to saved businesses format
+      const businessesToImport = csvBusinesses.map(b => ({
+        ...b,
+        userId
+      }));
+      
+      const result = await importBusinessesForUser(userId, businessesToImport);
+      
+      res.status(201).json({ 
+        message: `Successfully imported ${result.count} businesses from CSV`,
+        businesses: result.businesses
+      });
+    } catch (error) {
+      console.error("Error importing businesses from CSV:", error);
+      res.status(500).json({ message: "An error occurred while importing businesses from CSV" });
+    }
+  });
 
   // Parse CSV data from string format with intelligent column detection
   // Focusing only on company name, website, and address
