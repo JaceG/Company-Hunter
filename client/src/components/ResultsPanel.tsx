@@ -3,11 +3,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, 
+  AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import ResultsTable from "./ResultsTable";
 import { Business } from "@/lib/types";
 import { exportToCSV, downloadCSV, copyToClipboard } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { useImportBusinesses, useClearDuplicates } from "@/hooks/useBusiness";
+import { useImportBusinesses, useClearDuplicates, useClearAllBusinesses } from "@/hooks/useBusiness";
 
 interface ResultsPanelProps {
   businesses: Business[];
@@ -23,6 +26,7 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importBusinesses = useImportBusinesses();
   const clearDuplicates = useClearDuplicates();
+  const clearAllBusinesses = useClearAllBusinesses();
   
   // Count duplicates
   const duplicateCount = businesses.filter(b => b.isDuplicate).length;
@@ -114,6 +118,22 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
       toast({
         title: "Error",
         description: "Failed to clear duplicate flags.",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  const handleClearAllBusinesses = async () => {
+    try {
+      await clearAllBusinesses.mutateAsync();
+      toast({
+        title: "Data Cleared",
+        description: "All business data has been completely removed.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to clear business data.",
         variant: "destructive",
       });
     }

@@ -64,3 +64,17 @@ export function useClearDuplicates() {
     },
   });
 }
+
+// Hook for clearing all business data
+export function useClearAllBusinesses() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (): Promise<{ message: string }> => {
+      return await apiRequest("POST", "/api/businesses/clear-all", {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/businesses"] });
+    },
+  });
+}

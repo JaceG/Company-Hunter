@@ -688,6 +688,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "An error occurred while clearing duplicate flags" });
     }
   });
+  
+  // Clear all business data (completely removes all businesses from storage)
+  app.post("/api/businesses/clear-all", async (_req, res) => {
+    try {
+      await storage.clearAllBusinesses();
+      res.json({ message: "All business data cleared successfully" });
+    } catch (error) {
+      console.error("Error clearing all business data:", error);
+      res.status(500).json({ message: "An error occurred while clearing all business data" });
+    }
+  });
 
   // Helper function to calculate distance using Haversine formula
   function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
