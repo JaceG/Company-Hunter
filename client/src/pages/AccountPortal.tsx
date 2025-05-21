@@ -21,7 +21,7 @@ export default function AccountPortal() {
   const importFromSearchMutation = useImportFromSearch();
   const importFromCSVMutation = useImportFromCSV();
   const logout = useLogout();
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
   
   const [searchTerm, setSearchTerm] = useState("");
   const [filterBadLeads, setFilterBadLeads] = useState(false);
@@ -33,9 +33,9 @@ export default function AccountPortal() {
   useEffect(() => {
     // Redirect to home if not authenticated
     if (!isAuthLoading && !isAuthenticated) {
-      navigate("/");
+      setLocation("/");
     }
-  }, [isAuthLoading, isAuthenticated, navigate]);
+  }, [isAuthLoading, isAuthenticated, setLocation]);
   
   // Handle file upload
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
