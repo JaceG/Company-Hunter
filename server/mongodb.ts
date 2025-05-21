@@ -159,13 +159,13 @@ export async function getSavedBusinesses(userId: string): Promise<SavedBusiness[
 
 export async function getSavedBusinessById(id: string): Promise<SavedBusiness | null> {
   const database = await connectToMongoDB();
-  const businessCollection = database.collection<SavedBusiness>(COLLECTIONS.SAVED_BUSINESSES);
+  const businessCollection = database.collection(COLLECTIONS.SAVED_BUSINESSES);
 
   try {
-    // Find business by ID
+    // Find business by ID - converting string ID to MongoDB ObjectId
     const business = await businessCollection.findOne({ 
-      _id: typeof id === 'string' ? new ObjectId(id) : id 
-    });
+      _id: new ObjectId(id) 
+    }) as SavedBusiness | null;
     if (!business) return null;
 
     return {
@@ -186,9 +186,12 @@ export async function updateSavedBusiness(id: string, updates: Partial<SavedBusi
   const { userId, _id, ...updateData } = updates;
 
   try {
+    // Use type assertion to handle MongoDB typing issues with ObjectId
+    const filter = { _id: new ObjectId(id) } as any;
+    
     // Update business
     const result = await businessCollection.findOneAndUpdate(
-      { _id: new ObjectId(id) },
+      filter,
       { 
         $set: { 
           ...updateData,
@@ -196,7 +199,7 @@ export async function updateSavedBusiness(id: string, updates: Partial<SavedBusi
         } 
       },
       { returnDocument: 'after' }
-    );
+    ) as any;
 
     if (!result) return null;
 
