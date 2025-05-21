@@ -54,8 +54,12 @@ export function useImportFromCSV() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async (csvData: string) => {
-      return await apiRequest("POST", "/api/my/businesses/import-from-csv", { csvData });
+    mutationFn: async (options: { 
+      csvData: string, 
+      skipDuplicates?: boolean, 
+      replaceDuplicates?: boolean 
+    }) => {
+      return await apiRequest("POST", "/api/my/businesses/import-from-csv", options);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/my/businesses"] });

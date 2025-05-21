@@ -320,7 +320,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/my/businesses/import-from-csv", authenticate, async (req, res) => {
     try {
       const userId = req.user!.userId;
-      const { csvData } = req.body;
+      const { csvData, skipDuplicates = true, replaceDuplicates = false } = req.body;
       
       if (!csvData) {
         return res.status(400).json({ message: "CSV data is required" });
@@ -339,7 +339,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId
       }));
       
-      const result = await importBusinessesForUser(userId, businessesToImport);
+      // Get duplicate handling options
+      const importOptions = {
+        skipDuplicates,
+        replaceDuplicates
+      };
+      
+      const result = await importBusinessesForUser(userId, businessesToImport, importOptions);
       
       res.status(201).json({ 
         message: `Successfully imported ${result.count} businesses from CSV`,

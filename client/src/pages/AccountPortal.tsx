@@ -30,6 +30,8 @@ export default function AccountPortal() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [csvContent, setCsvContent] = useState<string>("");
+  const [skipDuplicates, setSkipDuplicates] = useState<boolean>(true);
+  const [replaceDuplicates, setReplaceDuplicates] = useState<boolean>(false);
   
   useEffect(() => {
     // Redirect to home if not authenticated
@@ -58,7 +60,11 @@ export default function AccountPortal() {
   const handleImportCSV = async () => {
     if (csvContent) {
       try {
-        await importFromCSVMutation.mutateAsync(csvContent);
+        await importFromCSVMutation.mutateAsync({
+          csvData: csvContent,
+          skipDuplicates,
+          replaceDuplicates
+        });
         setSelectedFile(null);
         setCsvContent("");
       } catch (error) {
@@ -210,11 +216,28 @@ export default function AccountPortal() {
                   </div>
                   <div className="mb-4">
                     <div className="flex items-center space-x-2 mb-2">
-                      <Checkbox id="ignore-duplicates" />
+                      <Checkbox 
+                        id="ignore-duplicates" 
+                        checked={skipDuplicates}
+                        onCheckedChange={(checked) => {
+                          setSkipDuplicates(checked === true);
+                          // If skipping, can't replace
+                          if (checked === true) {
+                            setReplaceDuplicates(false);
+                          }
+                        }}
+                      />
                       <Label htmlFor="ignore-duplicates">Skip duplicate entries</Label>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Checkbox id="replace-duplicates" />
+                      <Checkbox 
+                        id="replace-duplicates" 
+                        checked={replaceDuplicates}
+                        disabled={skipDuplicates}
+                        onCheckedChange={(checked) => {
+                          setReplaceDuplicates(checked === true);
+                        }}
+                      />
                       <Label htmlFor="replace-duplicates">Replace existing duplicates</Label>
                     </div>
                   </div>
@@ -251,7 +274,11 @@ export default function AccountPortal() {
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction 
                       onClick={() => {
-                        // Clear all data
+                        clearAllBusinessesMutation.mutate(undefined, {
+                          onSuccess: (result) => {
+                            console.log(`Deleted ${result.count} companies`);
+                          }
+                        });
                       }} 
                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                     >
