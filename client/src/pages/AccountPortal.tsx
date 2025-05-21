@@ -114,22 +114,46 @@ export default function AccountPortal() {
         { name: "WillowTree", website: "https://www.willowtreeapps.com/", careerLink: "https://www.willowtreeapps.com/careers/jobs", location: "274 Marconi Blvd #300, Columbus, OH 43215", isBadLead: false, notes: "" }
       ];
       
-      // Import each company individually
-      for (const company of sampleCompanies) {
-        await apiRequest('/api/my/businesses', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(company)
+      // Format companies as a batch to import at once
+      const formattedCompanies = sampleCompanies.map(comp => ({
+        ...comp,
+        distance: comp.distance || '',
+        isDuplicate: false
+      }));
+      
+      try {
+        // Use the existing mutation to import businesses from search
+        await importFromSearchMutation.mutateAsync();
+        
+        // Refresh the list
+        queryClient.invalidateQueries({ queryKey: ['/api/my/businesses'] });
+        
+        toast({
+          title: "Your company list loaded!",
+          description: "Your personal company list has been imported successfully.",
+        });
+      } catch (innerError) {
+        console.error("Inner error:", innerError);
+        
+        // Fallback - try direct import
+        for (const business of formattedCompanies) {
+          await fetch('/api/my/businesses', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(business)
+          });
+        }
+        
+        // Refresh the list
+        queryClient.invalidateQueries({ queryKey: ['/api/my/businesses'] });
+        
+        toast({
+          title: "Your company list loaded!",
+          description: "Your personal company list has been imported via fallback method.",
         });
       }
-      
-      // Refresh the list
-      queryClient.invalidateQueries({ queryKey: ['/api/my/businesses'] });
-      
-      toast({
-        title: "Your company list loaded!",
-        description: "Your personal company list has been imported successfully.",
-      });
     } catch (error) {
       console.error("Error loading sample data:", error);
       toast({
