@@ -75,6 +75,30 @@ export default function AccountPortal() {
     }
   };
   
+  // Handle import of sample data for Jace's account
+  const handleImportSampleData = async () => {
+    try {
+      // Load the CSV file directly from the server
+      const response = await fetch('/attached_assets/List of Companies - Sheet1.csv');
+      const csvData = await response.text();
+      
+      // Send the CSV data to the server
+      await importFromCSVMutation.mutateAsync(csvData);
+      
+      toast({
+        title: "Your company list loaded!",
+        description: "Your personal company list has been imported successfully.",
+      });
+    } catch (error) {
+      console.error("Error loading sample data:", error);
+      toast({
+        title: "Import failed",
+        description: "There was a problem loading your company list. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+  
   // Handle updating a business
   const handleUpdateBusiness = async (id: string, updates: Partial<SavedBusiness>) => {
     try {
@@ -239,6 +263,29 @@ export default function AccountPortal() {
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
+                
+                {/* Special Jace Account Features */}
+                {user?.email === 'jace.galloway@gmail.com' && (
+                  <Button 
+                    variant="default" 
+                    size="lg"
+                    className="bg-green-600 hover:bg-green-700"
+                    onClick={handleImportSampleData}
+                    disabled={importSampleMutation.isPending}
+                  >
+                    {importSampleMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Loading Your Data...
+                      </>
+                    ) : (
+                      <>
+                        <Database className="w-4 h-4 mr-2" />
+                        Load My Company List
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
             
