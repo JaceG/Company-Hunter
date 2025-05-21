@@ -67,6 +67,8 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
     }
   };
   
+  const importBusinessesMutation = useImportBusinesses();
+  
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -76,7 +78,7 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
       try {
         const csvData = event.target?.result as string;
         if (csvData) {
-          const result = await importBusinesses.mutateAsync(csvData);
+          const result = await importBusinessesMutation.mutateAsync(csvData);
           toast({
             title: "Import Successful",
             description: `${result.count} businesses imported from CSV.`,
@@ -97,38 +99,6 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
     };
     
     reader.readAsText(file);
-  };
-  
-  const handleClearDuplicateFlags = async () => {
-    try {
-      await clearDuplicates.mutateAsync();
-      toast({
-        title: "Duplicates Reset",
-        description: "All duplicate flags have been cleared.",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to clear duplicate flags.",
-        variant: "destructive",
-      });
-    }
-  };
-  
-  const handleClearAllBusinesses = async () => {
-    try {
-      await clearAllBusinesses.mutateAsync();
-      toast({
-        title: "Data Cleared",
-        description: "All business data has been completely removed.",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to clear business data.",
-        variant: "destructive",
-      });
-    }
   };
   
   return (
