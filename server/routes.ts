@@ -13,38 +13,162 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Helper function to convert miles to meters for Google Places API
   const milesToMeters = (miles: number) => Math.round(miles * 1609.34);
 
-  // Parse CSV data from string format
+  // Parse CSV data from string format with intelligent column detection
   function parseCSV(csvContent: string): ImportBusiness[] {
     const lines = csvContent.split('\n');
-    const headers = lines[0].split(',').map(h => h.trim());
     
-    // Find the column indices
-    const nameIndex = headers.findIndex(h => h.toLowerCase().includes('company') || h.toLowerCase().includes('name'));
-    const websiteIndex = headers.findIndex(h => h.toLowerCase().includes('website'));
-    const locationIndex = headers.findIndex(h => h.toLowerCase().includes('location'));
-    const badLeadIndex = headers.findIndex(h => h.toLowerCase().includes('bad') && h.toLowerCase().includes('lead'));
-    const distanceIndex = headers.findIndex(h => h.toLowerCase().includes('distance') || h.toLowerCase().includes('driving'));
-    const notesIndex = headers.findIndex(h => h.toLowerCase().includes('notes'));
-    const careerLinkIndex = headers.findIndex(h => h.toLowerCase().includes('career'));
+    // Handle various CSV formats - commas, semicolons, or tabs
+    let separator = ',';
+    if (lines[0].includes(';')) separator = ';';
+    else if (lines[0].includes('\t')) separator = '\t';
+    
+    const headers = lines[0].split(separator).map(h => h.trim().replace(/^"|"$/g, ''));
+    
+    // Intelligent column detection
+    const columnMap = {
+      name: -1,
+      website: -1,
+      location: -1,
+      badLead: -1,
+      distance: -1,
+      notes: -1,
+      careerLink: -1
+    };
+    
+    // Map column names to their index
+    headers.forEach((header, index) => {
+      const headerLower = header.toLowerCase();
 
+      // Company name detection
+      if (columnMap.name === -1 && (
+          headerLower.includes('company') || 
+          headerLower.includes('name') || 
+          headerLower.includes('business') ||
+          headerLower === 'organization'
+        )) {
+        columnMap.name = index;
+      }
+      
+      // Website detection
+      if (columnMap.website === -1 && (
+          headerLower.includes('website') || 
+          headerLower.includes('url') || 
+          headerLower.includes('site') ||
+          headerLower.includes('web')
+        )) {
+        columnMap.website = index;
+      }
+      
+      // Location detection
+      if (columnMap.location === -1 && (
+          headerLower.includes('location') || 
+          headerLower.includes('address') || 
+          headerLower.includes('street') ||
+          headerLower.includes('city') ||
+          headerLower.includes('state')
+        )) {
+        columnMap.location = index;
+      }
+      
+      // Bad lead detection
+      if (columnMap.badLead === -1 && (
+          (headerLower.includes('bad') && headerLower.includes('lead')) || 
+          headerLower.includes('exclude') || 
+          headerLower.includes('ignore') ||
+          headerLower.includes('invalid')
+        )) {
+        columnMap.badLead = index;
+      }
+      
+      // Distance detection
+      if (columnMap.distance === -1 && (
+          headerLower.includes('distance') || 
+          headerLower.includes('miles') || 
+          headerLower.includes('km') ||
+          headerLower.includes('driving')
+        )) {
+        columnMap.distance = index;
+      }
+      
+      // Notes detection
+      if (columnMap.notes === -1 && (
+          headerLower.includes('note') || 
+          headerLower.includes('comment') || 
+          headerLower.includes('remark') ||
+          headerLower.includes('description')
+        )) {
+        columnMap.notes = index;
+      }
+      
+      // Career link detection
+      if (columnMap.careerLink === -1 && (
+          headerLower.includes('career') || 
+          headerLower.includes('job') || 
+          headerLower.includes('employment') ||
+          headerLower.includes('work')
+        )) {
+        columnMap.careerLink = index;
+      }
+    });
+    
+    // If name column wasn't found, try to determine it by examining data
+    if (columnMap.name === -1) {
+      // If we couldn't find a good header, just use the first column as name
+      columnMap.name = 0;
+      
+      // Unless we already identified that column as something else
+      if (Object.values(columnMap).includes(0)) {
+        // Try to find an unused column
+        for (let i = 0; i < headers.length; i++) {
+          if (!Object.values(columnMap).includes(i)) {
+            columnMap.name = i;
+            break;
+          }
+        }
+      }
+    }
+    
+    // If website column wasn't found but we have URLs in the data, find them
+    if (columnMap.website === -1) {
+      // Look at a sample row to try to identify website column
+      for (let i = 1; i < Math.min(5, lines.length); i++) {
+        if (!lines[i].trim()) continue;
+        
+        const values = lines[i].split(separator).map(v => v.trim().replace(/^"|"$/g, ''));
+        for (let j = 0; j < values.length; j++) {
+          // Skip columns we've already identified
+          if (Object.values(columnMap).includes(j)) continue;
+          
+          // Check if column contains what looks like a URL
+          if (values[j].match(/^https?:\/\//i) || values[j].match(/^www\./i) || values[j].match(/\.(com|org|net|io|co)/i)) {
+            columnMap.website = j;
+            break;
+          }
+        }
+        if (columnMap.website !== -1) break;
+      }
+    }
+    
     const businesses: ImportBusiness[] = [];
     
     // Skip header row
     for (let i = 1; i < lines.length; i++) {
       if (!lines[i].trim()) continue; // Skip empty lines
       
-      const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+      const values = lines[i].split(separator).map(v => v.trim().replace(/^"|"$/g, ''));
       
-      // Only add if we have a company name
-      if (nameIndex >= 0 && values[nameIndex]) {
+      // Only add if we can extract a name (columnMap.name should always be valid)
+      if (values[columnMap.name]) {
         const business: ImportBusiness = {
-          name: values[nameIndex],
-          website: websiteIndex >= 0 ? values[websiteIndex] : undefined,
-          location: locationIndex >= 0 ? values[locationIndex] : undefined,
-          isBadLead: badLeadIndex >= 0 ? values[badLeadIndex].toUpperCase() === 'TRUE' : false,
-          distance: distanceIndex >= 0 ? values[distanceIndex] : undefined,
-          notes: notesIndex >= 0 ? values[notesIndex] : undefined,
-          careerLink: careerLinkIndex >= 0 ? values[careerLinkIndex] : undefined,
+          name: values[columnMap.name],
+          website: columnMap.website >= 0 ? values[columnMap.website] : undefined,
+          location: columnMap.location >= 0 ? values[columnMap.location] : undefined,
+          isBadLead: columnMap.badLead >= 0 ? 
+            (['TRUE', 'YES', 'Y', '1'].includes(values[columnMap.badLead].toUpperCase())) : 
+            false,
+          distance: columnMap.distance >= 0 ? values[columnMap.distance] : undefined,
+          notes: columnMap.notes >= 0 ? values[columnMap.notes] : undefined,
+          careerLink: columnMap.careerLink >= 0 ? values[columnMap.careerLink] : undefined,
         };
         
         businesses.push(business);
