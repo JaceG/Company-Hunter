@@ -507,7 +507,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Search for businesses
-  app.post("/api/businesses/search", async (req, res) => {
+  app.post("/api/businesses/search", optionalAuth, async (req, res) => {
     try {
       const searchParams = searchParamsSchema.parse(req.body);
       const { businessType, location, radius, maxResults } = searchParams;
@@ -585,11 +585,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Get user's saved businesses if user is logged in
+      let userSavedBusinesses: any[] = [];
+      if (req.user && req.user.userId) {
+        try {
+          userSavedBusinesses = await getSavedBusinesses(req.user.userId);
+          console.log(`Found ${userSavedBusinesses.length} saved businesses for user ${req.user.userId}`);
+        } catch (err) {
+          console.error("Error fetching saved businesses for duplicate check:", err);
+        }
+      }
+      
       // Store the results for later retrieval
       const savedBusinesses = await storage.saveBatchBusinesses(businesses);
       
-      // Check for duplicates in the new results
-      await storage.checkForDuplicates(savedBusinesses);
+      // For marking duplicates based on user's saved businesses
+      if (userSavedBusinesses.length > 0) {
+        for (const business of savedBusinesses) {
+          const isDuplicate = userSavedBusinesses.some(savedBusiness => {
+            // Check website match (normalize domains first)
+            if (business.website && savedBusiness.website) {
+              const normalizeUrl = (url: string) => {
+                return url.toLowerCase()
+                  .replace(/^https?:\/\//i, '')
+                  .replace(/^www\./i, '')
+                  .replace(/\/+$/, '');
+              };
+              
+              const businessDomain = normalizeUrl(business.website);
+              const savedDomain = normalizeUrl(savedBusiness.website);
+              
+              if (businessDomain === savedDomain) return true;
+            }
+            
+            // Check name match (normalize company names)
+            if (business.name && savedBusiness.name) {
+              const normalizeName = (name: string) => {
+                return name.toLowerCase()
+                  .replace(/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i, '')
+                  .trim();
+              };
+              
+              const businessName = normalizeName(business.name);
+              const savedName = normalizeName(savedBusiness.name);
+              
+              if (businessName === savedName) return true;
+            }
+            
+            return false;
+          });
+          
+          // Update the business with isDuplicate flag if it's a duplicate
+          if (isDuplicate && business.id) {
+            await storage.updateBusiness(business.id, { isDuplicate: true });
+          }
+        }
+      } else {
+        // Fall back to the regular duplicate check with stored businesses
+        await storage.checkForDuplicates(savedBusinesses);
+      }
       
       // Get the updated businesses with duplicate flags
       const updatedBusinesses = await storage.getBusinesses();
