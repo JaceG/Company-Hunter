@@ -20,6 +20,7 @@ export default function AccountPortal() {
   const deleteBusinessMutation = useDeleteSavedBusiness();
   const importFromSearchMutation = useImportFromSearch();
   const importFromCSVMutation = useImportFromCSV();
+  const clearAllBusinessesMutation = useClearAllSavedBusinesses();
   const logout = useLogout();
   const [, setLocation] = useLocation();
   
