@@ -511,6 +511,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Search for businesses
   app.post("/api/businesses/search", optionalAuth, async (req, res) => {
     try {
+      // Clear all existing businesses before performing a new search
+      await storage.clearAllBusinesses();
+      
       const searchParams = searchParamsSchema.parse(req.body);
       const { businessType, location, radius, maxResults } = searchParams;
       
