@@ -110,14 +110,34 @@ export class MemStorage implements IStorage {
     const markedBusinesses: Business[] = [];
 
     for (const newBusiness of newBusinesses) {
-      // For simplicity, check duplicates based on name and website
-      const isDuplicate = existingBusinesses.some(existing => 
-        // Check for duplicate by website (if both have websites)
-        (newBusiness.website && existing.website && 
-         normalizeDomain(newBusiness.website) === normalizeDomain(existing.website)) ||
-        // Or by name (fallback if websites aren't available)
-        (normalizeName(newBusiness.name) === normalizeName(existing.name))
+      let isDuplicate = false;
+      
+      // Only compare against businesses that aren't from this current batch
+      const existingBusinessesForComparison = existingBusinesses.filter(
+        existing => !newBusinesses.some(nb => nb.id === existing.id)
       );
+      
+      // First, try to match based on domain name only
+      if (newBusiness.website) {
+        const newDomain = normalizeDomain(newBusiness.website);
+        
+        if (newDomain) {
+          isDuplicate = existingBusinessesForComparison.some(existing => 
+            existing.website && normalizeDomain(existing.website) === newDomain
+          );
+        }
+      }
+      
+      // If no domain match was found, try exact name match as fallback
+      if (!isDuplicate && newBusiness.name) {
+        const normalizedNewName = normalizeName(newBusiness.name);
+        
+        if (normalizedNewName) {
+          isDuplicate = existingBusinessesForComparison.some(existing =>
+            normalizeName(existing.name) === normalizedNewName
+          );
+        }
+      }
       
       if (isDuplicate && newBusiness.id) {
         // Update the business marking it as a duplicate
@@ -135,20 +155,26 @@ export class MemStorage implements IStorage {
 // Helper functions for comparing businesses
 function normalizeDomain(url: string): string {
   try {
-    // Remove protocol, www, and trailing slashes for comparison
-    return url.toLowerCase()
+    if (!url) return '';
+    
+    // Extract just the main domain (example.com) for comparison
+    const domainMatch = url.toLowerCase()
       .replace(/^https?:\/\//i, '')
       .replace(/^www\./i, '')
-      .replace(/\/+$/, '');
+      .match(/([a-z0-9-]+\.[a-z0-9-]+)/i);
+    
+    return domainMatch ? domainMatch[0] : '';
   } catch {
     return url.toLowerCase();
   }
 }
 
 function normalizeName(name: string): string {
+  if (!name) return '';
+  
   // Remove common business suffixes and lowercase
   return name.toLowerCase()
-    .replace(/,?\s+(inc|llc|corporation|corp|co|company)\.?$/i, '')
+    .replace(/,?\s+(inc|llc|corporation|corp|co|company|ltd|limited)\.?$/i, '')
     .trim();
 }
 
