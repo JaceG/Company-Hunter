@@ -153,12 +153,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth/user", authenticate, async (req, res) => {
     try {
       // User is already authenticated via middleware
-      const userData = { 
+      res.json({ 
         userId: req.user!.userId,
         email: req.user!.email
-      };
-      
-      res.json(userData);
+      });
     } catch (error) {
       console.error("Error getting user:", error);
       res.status(500).json({ message: "An error occurred while fetching user" });
