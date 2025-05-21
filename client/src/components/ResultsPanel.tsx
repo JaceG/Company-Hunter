@@ -1,8 +1,6 @@
 import { useState, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, 
   AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -10,7 +8,9 @@ import ResultsTable from "./ResultsTable";
 import { Business } from "@/lib/types";
 import { exportToCSV, downloadCSV, copyToClipboard } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { useImportBusinesses, useClearDuplicates, useClearAllBusinesses } from "@/hooks/useBusiness";
+import { useImportBusinesses } from "@/hooks/useBusiness";
+import { useImportFromSearch } from "@/hooks/useSavedBusinesses";
+import { queryClient } from "@/lib/queryClient";
 
 interface ResultsPanelProps {
   businesses: Business[];
@@ -22,19 +22,11 @@ interface ResultsPanelProps {
 export default function ResultsPanel({ businesses, isLoading, error, onRetry }: ResultsPanelProps) {
   const { toast } = useToast();
   const [copyButtonText, setCopyButtonText] = useState("Copy Data");
-  const [hideDuplicates, setHideDuplicates] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const importBusinesses = useImportBusinesses();
-  const clearDuplicates = useClearDuplicates();
-  const clearAllBusinesses = useClearAllBusinesses();
+  const importFromSearch = useImportFromSearch();
   
-  // Count duplicates
-  const duplicateCount = businesses.filter(b => b.isDuplicate).length;
-  
-  // Filter businesses if needed
-  const filteredBusinesses = hideDuplicates 
-    ? businesses.filter(b => !b.isDuplicate)
-    : businesses;
+  // No duplicate filtering needed anymore
+  const filteredBusinesses = businesses;
   
   const handleDownloadCSV = () => {
     const csvContent = exportToCSV(filteredBusinesses);
@@ -160,7 +152,6 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
                 </h2>
                 <p className="text-sm text-gray-500">
                   {filteredBusinesses.length} businesses found
-                  {duplicateCount > 0 && ` (${duplicateCount} duplicates${hideDuplicates ? ' hidden' : ''})`}
                 </p>
               </div>
               
@@ -193,131 +184,42 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
               </div>
             </div>
 
-            {/* Duplicate Controls */}
-            {duplicateCount > 0 && (
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pt-4 border-t border-gray-100">
-                <div className="flex items-center space-x-2">
-                  <Switch 
-                    id="hide-duplicates" 
-                    checked={hideDuplicates} 
-                    onCheckedChange={setHideDuplicates} 
-                  />
-                  <Label htmlFor="hide-duplicates">Hide duplicate businesses</Label>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleClearDuplicateFlags}
-                  className="mt-2 sm:mt-0"
-                >
-                  <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 3h18v18H3z"></path>
-                    <path d="M21 3l-9 9"></path>
-                    <path d="M12 12l-9 9"></path>
-                  </svg>
-                  Reset Duplicate Flags
-                </Button>
-              </div>
-            )}
-            
-            {/* Import Controls */}
+            {/* Add to My Company List Button */}
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pt-4 border-t border-gray-100">
               <div>
-                <p className="text-sm font-medium text-gray-700">Compare with Existing List</p>
-                <p className="text-xs text-gray-500">Upload a CSV file to identify duplicates in search results</p>
+                <p className="text-sm font-medium text-gray-700">Save Companies</p>
+                <p className="text-xs text-gray-500">Add search results to your personal company list</p>
               </div>
               
               <div className="mt-2 sm:mt-0 flex space-x-2">
-                <input 
-                  type="file"
-                  accept=".csv"
-                  ref={fileInputRef}
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-                
                 <Button
-                  variant="outline"
+                  variant="default"
                   size="sm"
-                  onClick={handleImportClick}
-                  disabled={importBusinesses.isPending}
+                  onClick={async () => {
+                    try {
+                      await importFromSearch.mutateAsync();
+                      
+                      toast({
+                        title: "Companies Saved",
+                        description: "Search results have been added to your company list",
+                      });
+                    } catch (error) {
+                      toast({
+                        title: "Error",
+                        description: "Failed to add companies to your list",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                  disabled={isLoading || businesses.length === 0}
                 >
-                  {importBusinesses.isPending ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Importing...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="17 8 12 3 7 8"></polyline>
-                        <line x1="12" y1="3" x2="12" y2="15"></line>
-                      </svg>
-                      Import CSV
-                    </>
-                  )}
+                  <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                    <polyline points="7 3 7 8 15 8"></polyline>
+                  </svg>
+                  Add to My Company List
                 </Button>
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleClearDuplicateFlags}
-                  disabled={clearDuplicates.isPending}
-                  className="text-amber-600 hover:text-amber-700 border-amber-600 hover:bg-amber-50"
-                >
-                  {clearDuplicates.isPending ? "Clearing..." : "Clear Duplicate Flags"}
-                </Button>
-                
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={clearAllBusinesses.isPending}
-                      className="text-destructive hover:text-destructive border-destructive hover:bg-destructive/10"
-                    >
-                      {clearAllBusinesses.isPending ? (
-                        <>
-                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-destructive" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Clearing...
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M3 6h18"></path>
-                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                            <line x1="10" y1="11" x2="10" y2="17"></line>
-                            <line x1="14" y1="11" x2="14" y2="17"></line>
-                          </svg>
-                          Clear All Data
-                        </>
-                      )}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This action will permanently delete all business data and cannot be undone.
-                        Any imported CSV data used for duplicate detection will be completely removed.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleClearAllBusinesses} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                        Yes, Delete Everything
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
               </div>
             </div>
           </div>

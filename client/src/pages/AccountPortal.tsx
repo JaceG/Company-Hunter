@@ -185,9 +185,6 @@ export default function AccountPortal() {
               <p><strong>Email:</strong> {user?.email}</p>
             </div>
             <div className="flex gap-2">
-              <Button onClick={handleImportFromSearch}>
-                Import From Search Results
-              </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline">
@@ -199,7 +196,8 @@ export default function AccountPortal() {
                   <AlertDialogHeader>
                     <AlertDialogTitle>Import Companies from CSV</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Upload a CSV file to import companies to your master list.
+                      Upload a CSV file to import companies to your company list.
+                      Duplicates will be handled based on your preference.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <div className="mb-4">
@@ -208,6 +206,16 @@ export default function AccountPortal() {
                       accept=".csv" 
                       onChange={handleFileChange}
                     />
+                  </div>
+                  <div className="mb-4">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Checkbox id="ignore-duplicates" />
+                      <Label htmlFor="ignore-duplicates">Skip duplicate entries</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox id="replace-duplicates" />
+                      <Label htmlFor="replace-duplicates">Replace existing duplicates</Label>
+                    </div>
                   </div>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -224,6 +232,33 @@ export default function AccountPortal() {
                 <Download className="w-4 h-4 mr-2" />
                 Export Current View
               </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" className="text-destructive hover:text-destructive border-destructive hover:bg-destructive/10">
+                    <Trash className="w-4 h-4 mr-2" />
+                    Clear All Data
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This action will permanently delete all your saved companies and cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction 
+                      onClick={() => {
+                        // Clear all data
+                      }} 
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Yes, Delete Everything
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
         </CardContent>
@@ -231,7 +266,7 @@ export default function AccountPortal() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Master Company List</CardTitle>
+          <CardTitle>My Company List</CardTitle>
           <CardDescription>
             Total: {filteredBusinesses.length} companies
             {savedBusinesses && ` (${savedBusinesses.length} total)`}
