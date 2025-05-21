@@ -5,6 +5,32 @@ import { insertBusinessSchema, searchParamsSchema, importBusinessSchema, type Im
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
 
+// Helper functions for comparing businesses
+function normalizeDomain(url: string): string {
+  try {
+    if (!url) return '';
+    
+    // Extract just the main domain (example.com) for comparison
+    const domainMatch = url.toLowerCase()
+      .replace(/^https?:\/\//i, '')
+      .replace(/^www\./i, '')
+      .match(/([a-z0-9-]+\.[a-z0-9-]+)/i);
+    
+    return domainMatch ? domainMatch[0] : '';
+  } catch {
+    return url.toLowerCase();
+  }
+}
+
+function normalizeName(name: string): string {
+  if (!name) return '';
+  
+  // Remove common business suffixes and lowercase
+  return name.toLowerCase()
+    .replace(/,?\s+(inc|llc|corporation|corp|co|company|ltd|limited)\.?$/i, '')
+    .trim();
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Google Places API endpoint
   const GOOGLE_PLACES_API_URL = "https://maps.googleapis.com/maps/api/place";
@@ -298,8 +324,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Import businesses from CSV
-  app.post("/api/businesses/import", async (req, res) => {
+  // Compare businesses from CSV with existing search results
+  app.post("/api/businesses/compare", async (req, res) => {
     try {
       const { csvData } = req.body;
       
@@ -307,24 +333,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "CSV data is required" });
       }
       
-      // Parse CSV data
-      const businesses = parseCSV(csvData);
+      // Parse CSV data without storing it
+      const csvBusinesses = parseCSV(csvData);
       
-      if (businesses.length === 0) {
+      if (csvBusinesses.length === 0) {
         return res.status(400).json({ message: "No valid businesses found in CSV data" });
       }
       
-      // Import businesses to storage
-      const importedCount = await storage.importBusinessesFromCSV(businesses);
+      // Get existing businesses (search results)
+      const existingBusinesses = await storage.getBusinesses();
+      let updatedCount = 0;
+      
+      // Check each existing business against the CSV list
+      for (const existing of existingBusinesses) {
+        if (!existing.id) continue;
+        
+        // Check if this business exists in the CSV data
+        const isDuplicate = csvBusinesses.some(csvBusiness => {
+          // Compare by domain if website is available
+          if (existing.website && csvBusiness.website) {
+            const existingDomain = normalizeDomain(existing.website);
+            const csvDomain = normalizeDomain(csvBusiness.website);
+            if (existingDomain && csvDomain && existingDomain === csvDomain) {
+              return true;
+            }
+          }
+          
+          // Fall back to company name comparison
+          const existingName = normalizeName(existing.name);
+          const csvName = normalizeName(csvBusiness.name);
+          return existingName && csvName && existingName === csvName;
+        });
+        
+        // Mark as duplicate if found in CSV
+        if (isDuplicate) {
+          await storage.updateBusiness(existing.id, { isDuplicate: true });
+          updatedCount++;
+        }
+      }
       
       res.json({ 
-        message: `Successfully imported ${importedCount} businesses`,
-        count: importedCount
+        message: `Found ${updatedCount} duplicate businesses`,
+        count: updatedCount
       });
       
     } catch (error) {
-      console.error("Error importing businesses:", error);
-      res.status(500).json({ message: "An error occurred while importing businesses" });
+      console.error("Error comparing businesses:", error);
+      res.status(500).json({ message: "An error occurred while comparing businesses" });
     }
   });
 

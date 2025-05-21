@@ -203,8 +203,8 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
             {/* Import Controls */}
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pt-4 border-t border-gray-100">
               <div>
-                <p className="text-sm font-medium text-gray-700">Import Existing Businesses</p>
-                <p className="text-xs text-gray-500">Upload a CSV file with company data to compare with search results</p>
+                <p className="text-sm font-medium text-gray-700">Compare with Existing List</p>
+                <p className="text-xs text-gray-500">Upload a CSV file to identify duplicates in search results</p>
               </div>
               
               <div className="mt-2 sm:mt-0">

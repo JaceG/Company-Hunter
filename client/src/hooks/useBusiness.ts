@@ -39,13 +39,13 @@ export function useUpdateBusiness() {
   });
 }
 
-// Hook for importing businesses from CSV
+// Hook for importing businesses from CSV for comparison only
 export function useImportBusinesses() {
   const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async (csvData: string): Promise<{ message: string; count: number }> => {
-      const res = await apiRequest("POST", "/api/businesses/import", { csvData });
+      const res = await apiRequest("POST", "/api/businesses/compare", { csvData });
       return res.json();
     },
     onSuccess: () => {
