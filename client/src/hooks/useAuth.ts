@@ -40,13 +40,11 @@ export function useRegister() {
   
   return useMutation({
     mutationFn: async (userData: RegisterData): Promise<AuthResponse> => {
-      const response = await apiRequest("/api/auth/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(userData)
-      });
+      const response = await apiRequest(
+        "POST", 
+        "/api/auth/register", 
+        userData
+      );
       
       // Save auth token to localStorage for persistent sessions
       if (response.token) {
@@ -67,13 +65,11 @@ export function useLogin() {
   
   return useMutation({
     mutationFn: async (loginData: LoginData): Promise<AuthResponse> => {
-      const response = await apiRequest("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(loginData)
-      });
+      const response = await apiRequest(
+        "POST", 
+        "/api/auth/login", 
+        loginData
+      );
       
       // Save auth token to localStorage for persistent sessions
       if (response.token) {

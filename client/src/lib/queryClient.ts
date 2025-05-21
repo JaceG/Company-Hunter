@@ -2,8 +2,14 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    let errorText;
+    try {
+      const errorJson = await res.json();
+      errorText = errorJson.message || res.statusText;
+    } catch {
+      errorText = (await res.text()) || res.statusText;
+    }
+    throw new Error(`${res.status}: ${errorText}`);
   }
 }
 
@@ -11,16 +17,33 @@ export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
-): Promise<Response> {
+  options?: RequestInit
+): Promise<any> {
+  // Add auth token to request if available
+  const token = localStorage.getItem('authToken');
+  
+  const headers: HeadersInit = {
+    ...(data ? { "Content-Type": "application/json" } : {}),
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    ...(options?.headers || {})
+  };
+  
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
+    ...options
   });
 
   await throwIfResNotOk(res);
-  return res;
+  
+  // Handle no content responses
+  if (res.status === 204) {
+    return null;
+  }
+  
+  return res.json();
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
