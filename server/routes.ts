@@ -230,8 +230,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Delete all saved businesses for a user (IMPORTANT: This route must be defined BEFORE the delete by ID route)
-  app.delete("/api/my/businesses/all", authenticate, async (req, res) => {
+  // Delete all saved businesses for a user - using a completely different endpoint to avoid route conflicts
+  app.delete("/api/my/clear-all-businesses", authenticate, async (req, res) => {
     try {
       const userId = req.user!.userId;
       const deletedCount = await deleteAllSavedBusinesses(userId);
@@ -316,21 +316,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Delete all saved businesses for a user
-  app.delete("/api/my/businesses/all", authenticate, async (req, res) => {
-    try {
-      const userId = req.user!.userId;
-      const deletedCount = await deleteAllSavedBusinesses(userId);
-      
-      res.json({ 
-        message: "All saved businesses deleted successfully", 
-        count: deletedCount 
-      });
-    } catch (error) {
-      console.error("Error deleting all saved businesses:", error);
-      res.status(500).json({ message: "Failed to delete all saved businesses" });
-    }
-  });
+
   
   // Import businesses from CSV
   app.post("/api/my/businesses/import-from-csv", authenticate, async (req, res) => {
