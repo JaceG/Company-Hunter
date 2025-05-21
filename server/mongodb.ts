@@ -227,6 +227,20 @@ export async function deleteSavedBusiness(id: string): Promise<boolean> {
   }
 }
 
+export async function deleteAllSavedBusinesses(userId: string): Promise<number> {
+  const database = await connectToMongoDB();
+  const businessCollection = database.collection<SavedBusiness>(COLLECTIONS.SAVED_BUSINESSES);
+
+  try {
+    // Delete all businesses for this user
+    const result = await businessCollection.deleteMany({ userId });
+    return result.deletedCount || 0;
+  } catch (error) {
+    console.error(`Error deleting all businesses for user ${userId}:`, error);
+    return 0;
+  }
+}
+
 // Saved Lists Functions
 export async function createSavedList(list: SavedList): Promise<SavedList> {
   const database = await connectToMongoDB();

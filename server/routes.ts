@@ -21,6 +21,7 @@ import {
   saveBusiness, 
   updateSavedBusiness, 
   deleteSavedBusiness,
+  deleteAllSavedBusinesses,
   importBusinessesForUser,
   getSavedLists,
   createSavedList,
@@ -296,6 +297,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error importing businesses:", error);
       res.status(500).json({ message: "An error occurred while importing businesses" });
+    }
+  });
+  
+  // Delete all saved businesses for a user
+  app.delete("/api/my/businesses/all", authenticate, async (req, res) => {
+    try {
+      const userId = req.user!.userId;
+      const deletedCount = await deleteAllSavedBusinesses(userId);
+      
+      res.json({ 
+        message: "All saved businesses deleted successfully", 
+        count: deletedCount 
+      });
+    } catch (error) {
+      console.error("Error deleting all saved businesses:", error);
+      res.status(500).json({ message: "Failed to delete all saved businesses" });
     }
   });
   
