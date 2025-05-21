@@ -23,9 +23,17 @@ interface AuthResponse {
 }
 
 export function useAuth() {
-  const { data: user, isLoading } = useQuery({
+  const { data: user, isLoading, refetch } = useQuery({
     queryKey: ["/api/auth/user"],
     retry: false,
+    // If token exists but no user data is loaded, try refetching
+    onSettled: (data) => {
+      if (!data && localStorage.getItem('authToken')) {
+        refetch();
+      }
+    },
+    // Keep data between browser sessions
+    staleTime: Infinity,
   });
 
   return {
