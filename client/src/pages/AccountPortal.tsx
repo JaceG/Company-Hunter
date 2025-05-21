@@ -32,6 +32,9 @@ export default function AccountPortal() {
   const [csvContent, setCsvContent] = useState<string>("");
   const [skipDuplicates, setSkipDuplicates] = useState<boolean>(true);
   const [replaceDuplicates, setReplaceDuplicates] = useState<boolean>(false);
+  const [csvPreviewData, setCsvPreviewData] = useState<SavedBusiness[]>([]);
+  const [duplicatesFound, setDuplicatesFound] = useState<SavedBusiness[]>([]);
+  const [showPreview, setShowPreview] = useState<boolean>(false);
   
   useEffect(() => {
     // Redirect to home if not authenticated
@@ -40,20 +43,146 @@ export default function AccountPortal() {
     }
   }, [isAuthLoading, isAuthenticated, setLocation]);
   
+  // Parse CSV content into business objects
+  const parseCSVContent = (content: string) => {
+    // Split by lines
+    const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
+    
+    if (lines.length === 0) return [];
+    
+    // Get headers (first line)
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    
+    // Map to business objects
+    const businesses: SavedBusiness[] = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',');
+      
+      // Skip if not enough values
+      if (values.length < 2) continue;
+      
+      const business: any = {
+        userId: user?.userId || '',
+        isBadLead: false,
+        notes: '',
+      };
+      
+      // Map values to business properties
+      headers.forEach((header, index) => {
+        if (values[index]) {
+          if (header === 'name') {
+            business.name = values[index].trim();
+          } else if (header === 'website') {
+            business.website = values[index].trim();
+          } else if (header === 'location') {
+            business.location = values[index].trim();
+          } else if (header === 'distance') {
+            business.distance = values[index].trim();
+          } else if (header === 'career link' || header === 'careerlink') {
+            business.careerLink = values[index].trim();
+          } else if (header === 'notes') {
+            business.notes = values[index].trim();
+          }
+        }
+      });
+      
+      // Only add if it has at least a name
+      if (business.name) {
+        businesses.push(business);
+      }
+    }
+    
+    return businesses;
+  };
+
+  // Function to identify potential duplicates
+  const findDuplicates = (newBusinesses: SavedBusiness[]) => {
+    if (!savedBusinesses) return [];
+    
+    const duplicates: SavedBusiness[] = [];
+    
+    newBusinesses.forEach(newBusiness => {
+      // Check if business is a duplicate based on website or name
+      const isDuplicate = savedBusinesses.some(existing => {
+        // Check website match (normalize domain)
+        if (existing.website && newBusiness.website) {
+          const normalizeUrl = (url: string) => {
+            return url.toLowerCase()
+                     .replace(/^https?:\/\//i, '')
+                     .replace(/^www\./i, '')
+                     .replace(/\/+$/, '');
+          };
+          
+          const existingDomain = normalizeUrl(existing.website);
+          const newDomain = normalizeUrl(newBusiness.website);
+          
+          if (existingDomain === newDomain) return true;
+        }
+        
+        // Check name match (normalize company names)
+        if (existing.name && newBusiness.name) {
+          const normalizeName = (name: string) => {
+            return name.toLowerCase()
+                      .replace(/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i, '')
+                      .trim();
+          };
+          
+          const existingName = normalizeName(existing.name);
+          const newName = normalizeName(newBusiness.name);
+          
+          if (existingName === newName) return true;
+        }
+        
+        return false;
+      });
+      
+      if (isDuplicate) {
+        duplicates.push(newBusiness);
+      }
+    });
+    
+    return duplicates;
+  };
+
   // Handle file upload
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setSelectedFile(e.target.files[0]);
       
+      // Reset preview states
+      setShowPreview(false);
+      setCsvPreviewData([]);
+      setDuplicatesFound([]);
+      
       // Read file content
       const reader = new FileReader();
       reader.onload = (event) => {
         if (event.target?.result) {
-          setCsvContent(event.target.result as string);
+          const content = event.target.result as string;
+          setCsvContent(content);
+          
+          // Parse and preview the CSV data
+          const parsedData = parseCSVContent(content);
+          setCsvPreviewData(parsedData);
+          
+          // Find duplicates
+          const duplicates = findDuplicates(parsedData);
+          setDuplicatesFound(duplicates);
+          
+          // Show preview if there's data to show
+          if (parsedData.length > 0) {
+            setShowPreview(true);
+          }
         }
       };
       reader.readAsText(e.target.files[0]);
     }
+  };
+  
+  // Preview the CSV data before importing
+  const handlePreviewCSV = () => {
+    setShowPreview(true);
   };
   
   // Handle CSV import
@@ -65,8 +194,13 @@ export default function AccountPortal() {
           skipDuplicates,
           replaceDuplicates
         });
+        
+        // Reset states
         setSelectedFile(null);
         setCsvContent("");
+        setCsvPreviewData([]);
+        setDuplicatesFound([]);
+        setShowPreview(false);
       } catch (error) {
         console.error("Error importing CSV:", error);
       }
@@ -199,55 +333,134 @@ export default function AccountPortal() {
                     Import From CSV
                   </Button>
                 </AlertDialogTrigger>
-                <AlertDialogContent>
+                <AlertDialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                   <AlertDialogHeader>
                     <AlertDialogTitle>Import Companies from CSV</AlertDialogTitle>
                     <AlertDialogDescription>
                       Upload a CSV file to import companies to your company list.
-                      Duplicates will be handled based on your preference.
+                      {csvPreviewData.length > 0 && (
+                        <span className="block font-medium text-primary mt-1">
+                          Found {csvPreviewData.length} companies in CSV file
+                          {duplicatesFound.length > 0 && (
+                            <span className="text-destructive ml-1">
+                              ({duplicatesFound.length} potential duplicates detected)
+                            </span>
+                          )}
+                        </span>
+                      )}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
+                  
                   <div className="mb-4">
+                    <Label htmlFor="csv-file" className="mb-2 block">Select CSV File</Label>
                     <Input 
+                      id="csv-file"
                       type="file" 
                       accept=".csv" 
                       onChange={handleFileChange}
                     />
                   </div>
-                  <div className="mb-4">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <Checkbox 
-                        id="ignore-duplicates" 
-                        checked={skipDuplicates}
-                        onCheckedChange={(checked) => {
-                          setSkipDuplicates(checked === true);
-                          // If skipping, can't replace
-                          if (checked === true) {
-                            setReplaceDuplicates(false);
-                          }
-                        }}
-                      />
-                      <Label htmlFor="ignore-duplicates">Skip duplicate entries</Label>
+                  
+                  {showPreview && csvPreviewData.length > 0 && (
+                    <div className="border rounded-md mb-4 overflow-hidden">
+                      <div className="bg-muted p-2 font-medium flex items-center justify-between">
+                        <span>CSV Preview</span>
+                        {duplicatesFound.length > 0 && (
+                          <span className="text-sm text-destructive flex items-center">
+                            <AlertCircle className="w-4 h-4 mr-1" />
+                            {duplicatesFound.length} duplicates found
+                          </span>
+                        )}
+                      </div>
+                      <div className="max-h-[200px] overflow-y-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Company</TableHead>
+                              <TableHead>Website</TableHead>
+                              <TableHead>Location</TableHead>
+                              <TableHead className="w-[100px] text-right">Status</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {csvPreviewData.slice(0, 10).map((business, index) => {
+                              const isDuplicate = duplicatesFound.some(d => 
+                                d.name === business.name || d.website === business.website
+                              );
+                              
+                              return (
+                                <TableRow key={index} className={isDuplicate ? "bg-destructive/10" : ""}>
+                                  <TableCell className="font-medium">{business.name}</TableCell>
+                                  <TableCell>{business.website || "-"}</TableCell>
+                                  <TableCell>{business.location || "-"}</TableCell>
+                                  <TableCell className="text-right">
+                                    {isDuplicate ? (
+                                      <span className="text-destructive font-medium">Duplicate</span>
+                                    ) : (
+                                      <span className="text-primary">New</span>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                            {csvPreviewData.length > 10 && (
+                              <TableRow>
+                                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                                  + {csvPreviewData.length - 10} more entries
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id="replace-duplicates" 
-                        checked={replaceDuplicates}
-                        disabled={skipDuplicates}
-                        onCheckedChange={(checked) => {
-                          setReplaceDuplicates(checked === true);
-                        }}
-                      />
-                      <Label htmlFor="replace-duplicates">Replace existing duplicates</Label>
+                  )}
+                  
+                  {duplicatesFound.length > 0 && (
+                    <div className="mb-4">
+                      <div className="text-sm font-medium mb-2 flex items-center">
+                        <AlertCircle className="w-4 h-4 mr-1 text-destructive" />
+                        Duplicate Handling Options
+                      </div>
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Checkbox 
+                          id="ignore-duplicates" 
+                          checked={skipDuplicates}
+                          onCheckedChange={(checked) => {
+                            setSkipDuplicates(checked === true);
+                            // If skipping, can't replace
+                            if (checked === true) {
+                              setReplaceDuplicates(false);
+                            }
+                          }}
+                        />
+                        <Label htmlFor="ignore-duplicates">
+                          Skip duplicate entries ({duplicatesFound.length})
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox 
+                          id="replace-duplicates" 
+                          checked={replaceDuplicates}
+                          disabled={skipDuplicates}
+                          onCheckedChange={(checked) => {
+                            setReplaceDuplicates(checked === true);
+                          }}
+                        />
+                        <Label htmlFor="replace-duplicates">
+                          Replace existing duplicates with new data
+                        </Label>
+                      </div>
                     </div>
-                  </div>
+                  )}
+                  
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction 
                       onClick={handleImportCSV} 
-                      disabled={!selectedFile}
+                      disabled={!selectedFile || csvPreviewData.length === 0}
                     >
-                      Import
+                      Import {csvPreviewData.length} Companies
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
