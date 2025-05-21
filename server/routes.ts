@@ -206,11 +206,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const businessId = req.params.id;
       
       // Make sure business belongs to this user
-      const business = await getSavedBusinessById(businessId);
+      // Get user's businesses and find the one with matching ID
+      const userBusinesses = await getSavedBusinesses(userId);
+      const business = userBusinesses.find(b => b._id === businessId);
+      
       if (!business) {
         return res.status(404).json({ message: "Business not found" });
       }
       
+      // Check is redundant now since we filtered by userId, but keeping for clarity
       if (business.userId !== userId) {
         return res.status(403).json({ message: "You don't have permission to update this business" });
       }
@@ -231,12 +235,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user!.userId;
       const businessId = req.params.id;
       
-      // Make sure business belongs to this user
-      const business = await getSavedBusinessById(businessId);
+      // Get user's businesses and find the one with matching ID
+      const userBusinesses = await getSavedBusinesses(userId);
+      const business = userBusinesses.find(b => b._id === businessId);
+      
       if (!business) {
         return res.status(404).json({ message: "Business not found" });
       }
       
+      // Check is redundant now since we filtered by userId, but keeping for clarity
       if (business.userId !== userId) {
         return res.status(403).json({ message: "You don't have permission to delete this business" });
       }
