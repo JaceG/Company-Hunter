@@ -158,40 +158,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email: req.user!.email
       };
       
-      // Check if user has any saved businesses
-      const userBusinesses = await getSavedBusinesses(userData.userId);
-      
-      // If user has no saved businesses and email is jace.galloway@gmail.com, 
-      // automatically import the CSV data
-      if (userBusinesses.length === 0 && userData.email === 'jace.galloway@gmail.com') {
-        try {
-          // Read from search results first
-          const searchBusinesses = await storage.getBusinesses();
-          
-          // Convert them to saved businesses format
-          const businessesToImport = searchBusinesses
-            .map(b => ({
-              name: b.name,
-              website: b.website || '',
-              location: b.location || '',
-              distance: b.distance || '',
-              isBadLead: b.isBadLead || false,
-              notes: b.notes || '',
-              careerLink: b.careerLink || '',
-              userId: userData.userId
-            }));
-          
-          if (businessesToImport.length > 0) {
-            // Import businesses for this user
-            await importBusinessesForUser(userData.userId, businessesToImport);
-            console.log(`Automatically imported ${businessesToImport.length} businesses for ${userData.email}`);
-          }
-        } catch (importError) {
-          console.error("Error auto-importing initial data:", importError);
-          // Continue without importing, doesn't affect the login process
-        }
-      }
-      
       res.json(userData);
     } catch (error) {
       console.error("Error getting user:", error);

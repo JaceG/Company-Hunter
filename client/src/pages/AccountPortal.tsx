@@ -248,28 +248,7 @@ export default function AccountPortal() {
                   </AlertDialogContent>
                 </AlertDialog>
                 
-                {/* Special Jace Account Features */}
-                {user?.email === 'jace.galloway@gmail.com' && (
-                  <Button 
-                    variant="default" 
-                    size="lg"
-                    className="bg-green-600 hover:bg-green-700"
-                    onClick={handleImportSampleData}
-                    disabled={importSampleMutation.isPending}
-                  >
-                    {importSampleMutation.isPending ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Loading Your Data...
-                      </>
-                    ) : (
-                      <>
-                        <Database className="w-4 h-4 mr-2" />
-                        Load My Company List
-                      </>
-                    )}
-                  </Button>
-                )}
+
               </div>
             </div>
             
