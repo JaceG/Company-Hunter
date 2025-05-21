@@ -180,46 +180,69 @@ export default function AccountPortal() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
-            <div className="flex-1">
+          <div className="flex flex-col mb-6">
+            <div className="flex-1 mb-3">
               <p><strong>Email:</strong> {user?.email}</p>
             </div>
-            <div className="flex gap-2">
-              <Button onClick={handleImportFromSearch}>
-                Import From Search Results
-              </Button>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline">
-                    <FileUp className="w-4 h-4 mr-2" />
-                    Import From CSV
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Import Companies from CSV</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Upload a CSV file to import companies to your master list.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <div className="mb-4">
-                    <Input 
-                      type="file" 
-                      accept=".csv" 
-                      onChange={handleFileChange}
-                    />
-                  </div>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction 
-                      onClick={handleImportCSV} 
-                      disabled={!selectedFile}
-                    >
-                      Import
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+            
+            {/* Prominent import section */}
+            <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <h3 className="text-lg font-medium mb-2">Import Companies to Your Account</h3>
+              <p className="text-sm text-gray-600 mb-3">
+                Your master list is currently empty. Import companies from search results or CSV file to build your personal collection.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button 
+                  size="lg"
+                  onClick={handleImportFromSearch}
+                  className="bg-blue-600 hover:bg-blue-700"
+                  disabled={importFromSearchMutation.isPending}
+                >
+                  {importFromSearchMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Importing...
+                    </>
+                  ) : (
+                    <>Import All Search Results</>
+                  )}
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="lg">
+                      <FileUp className="w-4 h-4 mr-2" />
+                      Import From CSV
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Import Companies from CSV</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Upload a CSV file to import companies to your master list.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="mb-4">
+                      <Input 
+                        type="file" 
+                        accept=".csv" 
+                        onChange={handleFileChange}
+                      />
+                    </div>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction 
+                        onClick={handleImportCSV} 
+                        disabled={!selectedFile}
+                      >
+                        Import
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </div>
+            
+            <div className="flex justify-end">
               <Button variant="outline" onClick={handleExportCSV}>
                 <Download className="w-4 h-4 mr-2" />
                 Export Current View
