@@ -9,6 +9,7 @@ export interface IStorage {
   saveBatchBusinesses(businessList: InsertBusiness[]): Promise<Business[]>;
   importBusinessesFromCSV(businessList: ImportBusiness[]): Promise<number>;
   clearDuplicateFlags(): Promise<void>;
+  clearAllBusinesses(): Promise<void>; // Added method to clear all businesses
   checkForDuplicates(newBusinesses: Business[]): Promise<Business[]>;
 }
 
@@ -102,6 +103,12 @@ export class MemStorage implements IStorage {
         this.businesses.set(id, business);
       }
     }
+  }
+  
+  async clearAllBusinesses(): Promise<void> {
+    // Clear all businesses and reset the ID counter
+    this.businesses.clear();
+    this.currentId = 1;
   }
 
   async checkForDuplicates(newBusinesses: Business[]): Promise<Business[]> {
