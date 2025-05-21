@@ -5,7 +5,7 @@ import { User, UserCreate, SavedBusiness, SavedList } from '@shared/schema';
 
 // MongoDB connection string from environment variables
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://jacegalloway:1313@cluster0.77bcf.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-should-be-in-env';
+const JWT_SECRET = 'business-search-token-secret-2025';
 
 // Database and collection names
 const DB_NAME = 'businessSearchApp';
