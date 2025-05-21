@@ -207,7 +207,7 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
                 <p className="text-xs text-gray-500">Upload a CSV file to identify duplicates in search results</p>
               </div>
               
-              <div className="mt-2 sm:mt-0">
+              <div className="mt-2 sm:mt-0 flex space-x-2">
                 <input 
                   type="file"
                   accept=".csv"
@@ -241,6 +241,18 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
                     </>
                   )}
                 </Button>
+                
+                {duplicateCount > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClearDuplicateFlags}
+                    disabled={clearDuplicates.isPending}
+                    className="text-destructive hover:text-destructive border-destructive hover:bg-destructive/10"
+                  >
+                    {clearDuplicates.isPending ? "Clearing..." : "Clear CSV Data"}
+                  </Button>
+                )}
               </div>
             </div>
           </div>
