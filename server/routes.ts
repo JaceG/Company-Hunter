@@ -14,6 +14,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const milesToMeters = (miles: number) => Math.round(miles * 1609.34);
 
   // Parse CSV data from string format with intelligent column detection
+  // Focusing only on company name, website, and address
   function parseCSV(csvContent: string): ImportBusiness[] {
     const lines = csvContent.split('\n');
     
@@ -24,15 +25,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     const headers = lines[0].split(separator).map(h => h.trim().replace(/^"|"$/g, ''));
     
-    // Intelligent column detection
+    // Intelligent column detection - focusing only on essential columns
     const columnMap = {
       name: -1,
       website: -1,
-      location: -1,
-      badLead: -1,
-      distance: -1,
-      notes: -1,
-      careerLink: -1
+      location: -1
     };
     
     // Map column names to their index
@@ -68,46 +65,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           headerLower.includes('state')
         )) {
         columnMap.location = index;
-      }
-      
-      // Bad lead detection
-      if (columnMap.badLead === -1 && (
-          (headerLower.includes('bad') && headerLower.includes('lead')) || 
-          headerLower.includes('exclude') || 
-          headerLower.includes('ignore') ||
-          headerLower.includes('invalid')
-        )) {
-        columnMap.badLead = index;
-      }
-      
-      // Distance detection
-      if (columnMap.distance === -1 && (
-          headerLower.includes('distance') || 
-          headerLower.includes('miles') || 
-          headerLower.includes('km') ||
-          headerLower.includes('driving')
-        )) {
-        columnMap.distance = index;
-      }
-      
-      // Notes detection
-      if (columnMap.notes === -1 && (
-          headerLower.includes('note') || 
-          headerLower.includes('comment') || 
-          headerLower.includes('remark') ||
-          headerLower.includes('description')
-        )) {
-        columnMap.notes = index;
-      }
-      
-      // Career link detection
-      if (columnMap.careerLink === -1 && (
-          headerLower.includes('career') || 
-          headerLower.includes('job') || 
-          headerLower.includes('employment') ||
-          headerLower.includes('work')
-        )) {
-        columnMap.careerLink = index;
       }
     });
     
@@ -149,6 +106,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
     
+    // If location column wasn't found, look for text that might contain address patterns
+    if (columnMap.location === -1) {
+      // Look at sample rows to find address-like patterns
+      const addressRegex = /\b\d+\s+\w+\s+(st|street|ave|avenue|blvd|boulevard|rd|road|drive|dr|lane|ln|way)\b/i;
+      const cityStateRegex = /\b(columbus|ohio|oh),?\s+\d{5}(-\d{4})?\b/i;
+      
+      for (let i = 1; i < Math.min(5, lines.length); i++) {
+        if (!lines[i].trim()) continue;
+        
+        const values = lines[i].split(separator).map(v => v.trim().replace(/^"|"$/g, ''));
+        for (let j = 0; j < values.length; j++) {
+          // Skip columns we've already identified
+          if (Object.values(columnMap).includes(j)) continue;
+          
+          // Check if column contains what looks like an address
+          if (addressRegex.test(values[j]) || cityStateRegex.test(values[j])) {
+            columnMap.location = j;
+            break;
+          }
+        }
+        if (columnMap.location !== -1) break;
+      }
+    }
+    
+    console.log("Column mapping:", columnMap);
+    
     const businesses: ImportBusiness[] = [];
     
     // Skip header row
@@ -163,12 +146,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name: values[columnMap.name],
           website: columnMap.website >= 0 ? values[columnMap.website] : undefined,
           location: columnMap.location >= 0 ? values[columnMap.location] : undefined,
-          isBadLead: columnMap.badLead >= 0 ? 
-            (['TRUE', 'YES', 'Y', '1'].includes(values[columnMap.badLead].toUpperCase())) : 
-            false,
-          distance: columnMap.distance >= 0 ? values[columnMap.distance] : undefined,
-          notes: columnMap.notes >= 0 ? values[columnMap.notes] : undefined,
-          careerLink: columnMap.careerLink >= 0 ? values[columnMap.careerLink] : undefined,
+          isBadLead: false, // Default values for other fields
+          notes: '',
+          distance: '',
+          careerLink: undefined
         };
         
         businesses.push(business);
