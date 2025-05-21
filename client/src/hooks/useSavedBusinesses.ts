@@ -90,3 +90,17 @@ export function useDeleteSavedBusiness() {
     }
   });
 }
+
+// Clear all saved businesses
+export function useClearAllSavedBusinesses() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async () => {
+      return await apiRequest("DELETE", "/api/my/businesses/all");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/my/businesses"] });
+    }
+  });
+}
