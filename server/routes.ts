@@ -1,23 +1,70 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertBusinessSchema, searchParamsSchema } from "@shared/schema";
+import { insertBusinessSchema, searchParamsSchema, importBusinessSchema, type ImportBusiness } from "@shared/schema";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Google Places API endpoint
   const GOOGLE_PLACES_API_URL = "https://maps.googleapis.com/maps/api/place";
-  const API_KEY = process.env.GOOGLE_PLACES_API_KEY || "AIzaSyDNAdkNIQtoTq8SdgBXLP3JvFAimA8LsxM";
+  const API_KEY = process.env.GOOGLE_PLACES_API_KEY || "";
 
   // Helper function to convert miles to meters for Google Places API
   const milesToMeters = (miles: number) => Math.round(miles * 1609.34);
+
+  // Parse CSV data from string format
+  function parseCSV(csvContent: string): ImportBusiness[] {
+    const lines = csvContent.split('\n');
+    const headers = lines[0].split(',').map(h => h.trim());
+    
+    // Find the column indices
+    const nameIndex = headers.findIndex(h => h.toLowerCase().includes('company') || h.toLowerCase().includes('name'));
+    const websiteIndex = headers.findIndex(h => h.toLowerCase().includes('website'));
+    const locationIndex = headers.findIndex(h => h.toLowerCase().includes('location'));
+    const badLeadIndex = headers.findIndex(h => h.toLowerCase().includes('bad') && h.toLowerCase().includes('lead'));
+    const distanceIndex = headers.findIndex(h => h.toLowerCase().includes('distance') || h.toLowerCase().includes('driving'));
+    const notesIndex = headers.findIndex(h => h.toLowerCase().includes('notes'));
+    const careerLinkIndex = headers.findIndex(h => h.toLowerCase().includes('career'));
+
+    const businesses: ImportBusiness[] = [];
+    
+    // Skip header row
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue; // Skip empty lines
+      
+      const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+      
+      // Only add if we have a company name
+      if (nameIndex >= 0 && values[nameIndex]) {
+        const business: ImportBusiness = {
+          name: values[nameIndex],
+          website: websiteIndex >= 0 ? values[websiteIndex] : undefined,
+          location: locationIndex >= 0 ? values[locationIndex] : undefined,
+          isBadLead: badLeadIndex >= 0 ? values[badLeadIndex].toUpperCase() === 'TRUE' : false,
+          distance: distanceIndex >= 0 ? values[distanceIndex] : undefined,
+          notes: notesIndex >= 0 ? values[notesIndex] : undefined,
+          careerLink: careerLinkIndex >= 0 ? values[careerLinkIndex] : undefined,
+        };
+        
+        businesses.push(business);
+      }
+    }
+    
+    return businesses;
+  }
 
   // Search for businesses
   app.post("/api/businesses/search", async (req, res) => {
     try {
       const searchParams = searchParamsSchema.parse(req.body);
       const { businessType, location, radius, maxResults } = searchParams;
+      
+      if (!API_KEY) {
+        return res.status(500).json({ 
+          message: "Google Places API key is not configured"
+        });
+      }
       
       // First we need to geocode the location to get coordinates
       const geocodeResponse = await fetch(
@@ -79,17 +126,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
             location: details.formatted_address || place.vicinity || "",
             distance: `${distance.toFixed(1)} mi`,
             isBadLead: false,
-            notes: ""
+            notes: "",
+            isDuplicate: false,
+            careerLink: ""
           });
         }
       }
       
       // Store the results for later retrieval
-      await storage.saveBatchBusinesses(businesses);
+      const savedBusinesses = await storage.saveBatchBusinesses(businesses);
+      
+      // Check for duplicates in the new results
+      await storage.checkForDuplicates(savedBusinesses);
+      
+      // Get the updated businesses with duplicate flags
+      const updatedBusinesses = await storage.getBusinesses();
+      const newBusinesses = updatedBusinesses.filter(b => 
+        savedBusinesses.some(saved => saved.id === b.id));
       
       res.json({
-        businesses,
-        total: businesses.length
+        businesses: newBusinesses,
+        total: newBusinesses.length
       });
       
     } catch (error) {
@@ -133,6 +190,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating business:", error);
       res.status(500).json({ message: "An error occurred while updating the business" });
+    }
+  });
+
+  // Import businesses from CSV
+  app.post("/api/businesses/import", async (req, res) => {
+    try {
+      const { csvData } = req.body;
+      
+      if (!csvData) {
+        return res.status(400).json({ message: "CSV data is required" });
+      }
+      
+      // Parse CSV data
+      const businesses = parseCSV(csvData);
+      
+      if (businesses.length === 0) {
+        return res.status(400).json({ message: "No valid businesses found in CSV data" });
+      }
+      
+      // Import businesses to storage
+      const importedCount = await storage.importBusinessesFromCSV(businesses);
+      
+      res.json({ 
+        message: `Successfully imported ${importedCount} businesses`,
+        count: importedCount
+      });
+      
+    } catch (error) {
+      console.error("Error importing businesses:", error);
+      res.status(500).json({ message: "An error occurred while importing businesses" });
+    }
+  });
+
+  // Clear duplicate flags
+  app.post("/api/businesses/clear-duplicates", async (_req, res) => {
+    try {
+      await storage.clearDuplicateFlags();
+      res.json({ message: "Duplicate flags cleared successfully" });
+    } catch (error) {
+      console.error("Error clearing duplicate flags:", error);
+      res.status(500).json({ message: "An error occurred while clearing duplicate flags" });
     }
   });
 

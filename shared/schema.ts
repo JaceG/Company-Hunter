@@ -10,6 +10,8 @@ export const businesses = pgTable("businesses", {
   distance: text("distance"),
   isBadLead: boolean("is_bad_lead").default(false).notNull(),
   notes: text("notes"),
+  isDuplicate: boolean("is_duplicate").default(false),
+  careerLink: text("career_link"),
 });
 
 export const insertBusinessSchema = createInsertSchema(businesses).omit({
@@ -34,3 +36,15 @@ export const searchResultSchema = z.object({
 });
 
 export type SearchResult = z.infer<typeof searchResultSchema>;
+
+export const importBusinessSchema = z.object({
+  isBadLead: z.boolean().default(false),
+  name: z.string(),
+  website: z.string().optional(),
+  careerLink: z.string().optional(),
+  location: z.string().optional(),
+  distance: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export type ImportBusiness = z.infer<typeof importBusinessSchema>;

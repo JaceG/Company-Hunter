@@ -6,6 +6,8 @@ export interface Business {
   distance: string;
   isBadLead: boolean;
   notes: string;
+  isDuplicate?: boolean;
+  careerLink?: string;
 }
 
 export interface SearchParams {

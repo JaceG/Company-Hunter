@@ -1,4 +1,4 @@
-import { businesses, type Business, type InsertBusiness } from "@shared/schema";
+import { businesses, type Business, type InsertBusiness, type ImportBusiness } from "@shared/schema";
 
 export interface IStorage {
   getBusinesses(): Promise<Business[]>;
@@ -7,6 +7,9 @@ export interface IStorage {
   updateBusiness(id: number, business: Partial<InsertBusiness>): Promise<Business | undefined>;
   deleteBusiness(id: number): Promise<boolean>;
   saveBatchBusinesses(businessList: InsertBusiness[]): Promise<Business[]>;
+  importBusinessesFromCSV(businessList: ImportBusiness[]): Promise<number>;
+  clearDuplicateFlags(): Promise<void>;
+  checkForDuplicates(newBusinesses: Business[]): Promise<Business[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -28,7 +31,17 @@ export class MemStorage implements IStorage {
 
   async createBusiness(insertBusiness: InsertBusiness): Promise<Business> {
     const id = this.currentId++;
-    const business: Business = { ...insertBusiness, id };
+    const business: Business = { 
+      id,
+      name: insertBusiness.name,
+      website: insertBusiness.website || null,
+      location: insertBusiness.location || null,
+      distance: insertBusiness.distance || null,
+      isBadLead: insertBusiness.isBadLead || false,
+      notes: insertBusiness.notes || null,
+      isDuplicate: insertBusiness.isDuplicate || false,
+      careerLink: insertBusiness.careerLink || null
+    };
     this.businesses.set(id, business);
     return business;
   }
@@ -56,6 +69,87 @@ export class MemStorage implements IStorage {
     
     return savedBusinesses;
   }
+
+  async importBusinessesFromCSV(businessList: ImportBusiness[]): Promise<number> {
+    let importedCount = 0;
+    
+    for (const csvBusiness of businessList) {
+      // Convert CSV business to InsertBusiness format
+      const insertBusiness: InsertBusiness = {
+        name: csvBusiness.name,
+        website: csvBusiness.website || '',
+        location: csvBusiness.location || '',
+        distance: csvBusiness.distance || '',
+        isBadLead: csvBusiness.isBadLead || false,
+        notes: csvBusiness.notes || '',
+        isDuplicate: false,
+        careerLink: csvBusiness.careerLink || ''
+      };
+      
+      await this.createBusiness(insertBusiness);
+      importedCount++;
+    }
+    
+    return importedCount;
+  }
+
+  async clearDuplicateFlags(): Promise<void> {
+    // Reset all duplicate flags
+    const businessEntries = Array.from(this.businesses.entries());
+    for (const [id, business] of businessEntries) {
+      if (business.isDuplicate) {
+        business.isDuplicate = false;
+        this.businesses.set(id, business);
+      }
+    }
+  }
+
+  async checkForDuplicates(newBusinesses: Business[]): Promise<Business[]> {
+    // Get existing businesses for comparison
+    const existingBusinesses = await this.getBusinesses();
+    const markedBusinesses: Business[] = [];
+
+    for (const newBusiness of newBusinesses) {
+      // For simplicity, check duplicates based on name and website
+      const isDuplicate = existingBusinesses.some(existing => 
+        // Check for duplicate by website (if both have websites)
+        (newBusiness.website && existing.website && 
+         normalizeDomain(newBusiness.website) === normalizeDomain(existing.website)) ||
+        // Or by name (fallback if websites aren't available)
+        (normalizeName(newBusiness.name) === normalizeName(existing.name))
+      );
+      
+      if (isDuplicate && newBusiness.id) {
+        // Update the business marking it as a duplicate
+        const updated = await this.updateBusiness(newBusiness.id, { isDuplicate: true });
+        if (updated) {
+          markedBusinesses.push(updated);
+        }
+      }
+    }
+    
+    return markedBusinesses;
+  }
+}
+
+// Helper functions for comparing businesses
+function normalizeDomain(url: string): string {
+  try {
+    // Remove protocol, www, and trailing slashes for comparison
+    return url.toLowerCase()
+      .replace(/^https?:\/\//i, '')
+      .replace(/^www\./i, '')
+      .replace(/\/+$/, '');
+  } catch {
+    return url.toLowerCase();
+  }
+}
+
+function normalizeName(name: string): string {
+  // Remove common business suffixes and lowercase
+  return name.toLowerCase()
+    .replace(/,?\s+(inc|llc|corporation|corp|co|company)\.?$/i, '')
+    .trim();
 }
 
 export const storage = new MemStorage();

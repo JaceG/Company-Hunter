@@ -38,3 +38,33 @@ export function useUpdateBusiness() {
     },
   });
 }
+
+// Hook for importing businesses from CSV
+export function useImportBusinesses() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (csvData: string): Promise<{ message: string; count: number }> => {
+      const res = await apiRequest("POST", "/api/businesses/import", { csvData });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/businesses"] });
+    },
+  });
+}
+
+// Hook for clearing duplicate flags
+export function useClearDuplicates() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (): Promise<{ message: string }> => {
+      const res = await apiRequest("POST", "/api/businesses/clear-duplicates", {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/businesses"] });
+    },
+  });
+}

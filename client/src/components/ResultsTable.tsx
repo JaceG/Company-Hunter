@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { Business } from "@/lib/types";
 import { useUpdateBusiness } from "@/hooks/useBusiness";
@@ -115,19 +116,43 @@ export default function ResultsTable({ businesses, isLoading }: ResultsTableProp
                 </div>
               </TableHead>
               <TableHead>Distance</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead>Notes</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {currentBusinesses.map((business) => (
-              <TableRow key={business.id}>
+              <TableRow 
+                key={business.id}
+                className={business.isDuplicate ? "bg-amber-50" : ""}
+              >
                 <TableCell>
                   <Checkbox 
                     checked={business.isBadLead}
                     onCheckedChange={() => handleCheckboxChange(business)}
                   />
                 </TableCell>
-                <TableCell className="font-medium">{business.name}</TableCell>
+                <TableCell className="font-medium">
+                  {business.name}
+                  {business.isDuplicate && (
+                    <span className="ml-2 inline-flex items-center">
+                      <svg 
+                        className="w-4 h-4 text-amber-500" 
+                        xmlns="http://www.w3.org/2000/svg" 
+                        viewBox="0 0 24 24" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        strokeWidth="2" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round"
+                      >
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                        <line x1="12" y1="9" x2="12" y2="13"></line>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                      </svg>
+                    </span>
+                  )}
+                </TableCell>
                 <TableCell>
                   {business.website ? (
                     <a 
@@ -144,6 +169,18 @@ export default function ResultsTable({ businesses, isLoading }: ResultsTableProp
                 </TableCell>
                 <TableCell className="text-gray-500">{business.location}</TableCell>
                 <TableCell className="text-gray-500">{business.distance}</TableCell>
+                <TableCell>
+                  {business.isDuplicate && (
+                    <Badge variant="outline" className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200">
+                      Duplicate
+                    </Badge>
+                  )}
+                  {business.careerLink && (
+                    <Badge variant="outline" className="bg-blue-100 text-blue-800 hover:bg-blue-100 border-blue-200 ml-1">
+                      Has Career
+                    </Badge>
+                  )}
+                </TableCell>
                 <TableCell>
                   <button className="text-gray-400 hover:text-gray-600">
                     <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
