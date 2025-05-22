@@ -540,55 +540,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { lat, lng } = geocodeData.candidates[0].geometry.location;
       
       // Now search for businesses using the coordinates
-      const placesResponse = await fetch(
-        `${GOOGLE_PLACES_API_URL}/nearbysearch/json?location=${lat},${lng}&radius=${milesToMeters(Number(radius))}&keyword=${encodeURIComponent(businessType)}&type=establishment&key=${API_KEY}`
-      );
-      
-      const placesData = await placesResponse.json();
-      
-      if (placesData.status !== "OK" && placesData.status !== "ZERO_RESULTS") {
-        return res.status(400).json({ 
-          message: "Failed to search businesses",
-          details: placesData.status
-        });
-      }
-      
-      const businesses = [];
       const maxResultsNum = Number(maxResults);
-      const resultsToProcess = placesData.results?.slice(0, maxResultsNum) || [];
+      const businesses = [];
+      let nextPageToken = null;
       
-      // Process each place result to get additional details and format the response
-      for (const place of resultsToProcess) {
-        // Get additional details like website
-        const detailsResponse = await fetch(
-          `${GOOGLE_PLACES_API_URL}/details/json?place_id=${place.place_id}&fields=name,website,formatted_address,url&key=${API_KEY}`
-        );
+      // Continue fetching pages until we have enough results or no more pages
+      do {
+        // Build URL with nextPageToken if we have it
+        let url = `${GOOGLE_PLACES_API_URL}/nearbysearch/json?location=${lat},${lng}&radius=${milesToMeters(Number(radius))}&keyword=${encodeURIComponent(businessType)}&type=establishment&key=${API_KEY}`;
         
-        const detailsData = await detailsResponse.json();
+        if (nextPageToken) {
+          // Need to add pagetoken parameter if we have a token
+          url += `&pagetoken=${nextPageToken}`;
+          
+          // Google requires a delay between pagination requests
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
         
-        if (detailsData.status === "OK") {
-          const details = detailsData.result;
-          
-          // Calculate distance (for demo purposes, using a formula based on lat/lng)
-          // In a real app, we could use the Google Distance Matrix API
-          const distance = calculateDistance(
-            lat, lng, 
-            place.geometry.location.lat, 
-            place.geometry.location.lng
-          );
-          
-          businesses.push({
-            name: details.name || place.name,
-            website: details.website || "",
-            location: details.formatted_address || place.vicinity || "",
-            distance: `${distance.toFixed(1)} mi`,
-            isBadLead: false,
-            notes: "",
-            isDuplicate: false,
-            careerLink: ""
+        const placesResponse = await fetch(url);
+        const placesData = await placesResponse.json();
+        
+        if (placesData.status !== "OK" && placesData.status !== "ZERO_RESULTS") {
+          return res.status(400).json({ 
+            message: "Failed to search businesses",
+            details: placesData.status
           });
         }
-      }
+        
+        // Get the next page token if available
+        nextPageToken = placesData.next_page_token || null;
+        
+        // Get results from this page
+        const pageResults = placesData.results || [];
+        
+        // Only process up to the maximum number of requested results
+        const resultsToProcess = pageResults.slice(0, maxResultsNum - businesses.length);
+        
+        // Process each place result to get additional details and format the response
+        for (const place of resultsToProcess) {
+          // Get additional details like website
+          const detailsResponse = await fetch(
+            `${GOOGLE_PLACES_API_URL}/details/json?place_id=${place.place_id}&fields=name,website,formatted_address,url&key=${API_KEY}`
+          );
+          
+          const detailsData = await detailsResponse.json();
+          
+          if (detailsData.status === "OK") {
+            const details = detailsData.result;
+            
+            // Calculate distance (for demo purposes, using a formula based on lat/lng)
+            // In a real app, we could use the Google Distance Matrix API
+            const distance = calculateDistance(
+              lat, lng, 
+              place.geometry.location.lat, 
+              place.geometry.location.lng
+            );
+            
+            businesses.push({
+              name: details.name || place.name,
+              website: details.website || "",
+              location: details.formatted_address || place.vicinity || "",
+              distance: `${distance.toFixed(1)} mi`,
+              isBadLead: false,
+              notes: "",
+              isDuplicate: false,
+              careerLink: details.website ? `${details.website.replace(/\/+$/, '')}/careers` : ""
+            });
+          }
+        }
+        
+        console.log(`Fetched ${businesses.length}/${maxResultsNum} businesses so far, next page token: ${nextPageToken ? 'available' : 'none'}`);
+        
+        // Stop if we've reached the max results or this is the last page
+        if (businesses.length >= maxResultsNum || !nextPageToken) {
+          break;
+        }
+        
+      } while (true); // End of do-while loop for pagination
       
       // Get user's saved businesses if user is logged in
       let userSavedBusinesses: any[] = [];
