@@ -26,6 +26,7 @@ export default function AccountPortal() {
   
   const [searchTerm, setSearchTerm] = useState("");
   const [filterBadLeads, setFilterBadLeads] = useState(false);
+  const [filterRecentOnly, setFilterRecentOnly] = useState(false);
   const [sortField, setSortField] = useState<keyof SavedBusiness>("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -321,6 +322,18 @@ export default function AccountPortal() {
     }
   };
   
+  // Helper function to check if a business was added recently (last 24 hours)
+  const isRecentlyAdded = (business: SavedBusiness) => {
+    if (!business.createdAt) return false;
+    
+    const createdDate = new Date(business.createdAt);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - createdDate.getTime());
+    const diffHours = diffTime / (1000 * 60 * 60);
+    
+    return diffHours <= 24; // Within the last 24 hours
+  };
+  
   // Filter and sort businesses
   const filteredBusinesses = savedBusinesses ? savedBusinesses
     .filter(business => {
@@ -333,7 +346,10 @@ export default function AccountPortal() {
       // Apply bad lead filter
       const badLeadMatch = !filterBadLeads || !business.isBadLead;
       
-      return searchMatch && badLeadMatch;
+      // Apply recent only filter
+      const recentMatch = !filterRecentOnly || isRecentlyAdded(business);
+      
+      return searchMatch && badLeadMatch && recentMatch;
     })
     .sort((a, b) => {
       // Apply sorting
@@ -586,13 +602,24 @@ export default function AccountPortal() {
                 className="w-full"
               />
             </div>
-            <div className="flex items-center gap-2">
-              <Checkbox 
-                id="filter-bad-leads" 
-                checked={filterBadLeads}
-                onCheckedChange={(checked) => setFilterBadLeads(checked === true)}
-              />
-              <Label htmlFor="filter-bad-leads">Hide Bad Leads</Label>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Checkbox 
+                  id="filter-bad-leads" 
+                  checked={filterBadLeads}
+                  onCheckedChange={(checked) => setFilterBadLeads(checked === true)}
+                />
+                <Label htmlFor="filter-bad-leads">Hide Bad Leads</Label>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Checkbox 
+                  id="filter-recent-only" 
+                  checked={filterRecentOnly}
+                  onCheckedChange={(checked) => setFilterRecentOnly(checked === true)}
+                />
+                <Label htmlFor="filter-recent-only">Show Recent Only (24h)</Label>
+              </div>
             </div>
           </div>
 
@@ -623,6 +650,9 @@ export default function AccountPortal() {
                     </TableHead>
                     <TableHead className="cursor-pointer" onClick={() => handleSort("location")}>
                       Location {sortField === "location" && (sortDirection === "asc" ? "↑" : "↓")}
+                    </TableHead>
+                    <TableHead className="cursor-pointer" onClick={() => handleSort("createdAt")}>
+                      Date Added {sortField === "createdAt" && (sortDirection === "asc" ? "↑" : "↓")}
                     </TableHead>
                     <TableHead>Notes</TableHead>
                     <TableHead className="w-[100px] text-right">Actions</TableHead>
