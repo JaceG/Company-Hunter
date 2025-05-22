@@ -670,7 +670,16 @@ export default function AccountPortal() {
                           onCheckedChange={() => handleToggleBadLead(business)}
                         />
                       </TableCell>
-                      <TableCell className="font-medium">{business.name}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {business.name}
+                          {isRecentlyAdded(business) && (
+                            <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">
+                              New
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         {business.website ? (
                           <a 
@@ -685,6 +694,14 @@ export default function AccountPortal() {
                         ) : "-"}
                       </TableCell>
                       <TableCell>{business.location || "-"}</TableCell>
+                      <TableCell>
+                        {business.createdAt ? (
+                          <div className="flex flex-col">
+                            <span>{new Date(business.createdAt).toLocaleDateString()}</span>
+                            <span className="text-xs text-gray-500">{new Date(business.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                          </div>
+                        ) : "-"}
+                      </TableCell>
                       <TableCell>{business.notes || "-"}</TableCell>
                       <TableCell className="text-right">
                         <Button
