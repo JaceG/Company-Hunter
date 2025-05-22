@@ -479,22 +479,77 @@ export async function importBusinessesForUser(
       return false;
     }
 
-    // Look for duplicate by name as fallback
+    // Look for duplicate by name as fallback with enhanced matching
     const duplicateByName = existingBusinesses.find(existing => {
       if (!existing.name || !newBusiness.name) {
         return false;
       }
       
-      // Normalize names by lowercasing and removing common terms
-      const normalizedExisting = existing.name
-        .toLowerCase()
-        .replace(/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i, '');
-        
-      const normalizedNew = newBusiness.name
-        .toLowerCase()
-        .replace(/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i, '');
-        
-      return normalizedExisting === normalizedNew;
+      // Enhanced normalization that's more thorough:
+      // 1. Convert to lowercase
+      // 2. Remove legal suffixes (Inc, LLC, etc.)
+      // 3. Remove special characters including quotes and parentheses
+      // 4. Normalize whitespace
+      // 5. Replace common abbreviations
+      // 6. Remove filler words like "the", "and", etc.
+      const normalizeNameEnhanced = (name: string): string => {
+        return name
+          .toLowerCase()
+          // Replace common abbreviations
+          .replace(/\b(mktg|mrktg)\b/g, 'marketing')
+          .replace(/\b(co|comp)\b/g, 'company')
+          .replace(/\b(tech)\b/g, 'technology')
+          .replace(/\b(svcs)\b/g, 'services')
+          .replace(/\b(intl)\b/g, 'international')
+          .replace(/\b(grp)\b/g, 'group')
+          // Remove legal entity types and common suffixes
+          .replace(/\s*(inc|incorporated|llc|ltd|limited|corp|corporation|company|co|group|grp|holdings|partners|agency|associates|solutions|technologies|technology|digital|media|marketing|services|svcs|consultants|consultancy|international|intl|global)\.?\s*$/i, '')
+          // Remove "The" from beginning
+          .replace(/^the\s+/i, '')
+          // Remove special characters, leaving only alphanumeric and spaces
+          .replace(/[^\w\s]/g, '')
+          // Normalize whitespace (collapse multiple spaces to single space and trim)
+          .replace(/\s+/g, ' ')
+          .trim();
+      };
+      
+      // Apply enhanced normalization
+      const normalizedExisting = normalizeNameEnhanced(existing.name);
+      const normalizedNew = normalizeNameEnhanced(newBusiness.name);
+      
+      // Try exact match first
+      if (normalizedExisting === normalizedNew) {
+        return true;
+      }
+      
+      // If names are short (less than 3 words), require exact match
+      // Otherwise try additional fuzzy matching techniques
+      const wordCountExisting = normalizedExisting.split(' ').length;
+      const wordCountNew = normalizedNew.split(' ').length;
+      
+      if (wordCountExisting <= 2 && wordCountNew <= 2) {
+        return false; // Require exact match for short names
+      }
+      
+      // For longer names, check if one name contains the other completely
+      if (normalizedExisting.includes(normalizedNew) || normalizedNew.includes(normalizedExisting)) {
+        return true;
+      }
+      
+      // Check if there's significant word overlap for multi-word names
+      const wordsExisting = normalizedExisting.split(' ');
+      const wordsNew = normalizedNew.split(' ');
+      
+      // Count common words
+      const commonWords = wordsExisting.filter(word => wordsNew.includes(word));
+      
+      // If at least 2 significant words match and they represent at least 50% of the shorter name's words
+      if (commonWords.length >= 2 && 
+          (commonWords.length / Math.min(wordsExisting.length, wordsNew.length)) >= 0.5) {
+        return true;
+      }
+      
+      return false;
     });
 
     // If found duplicate by name
