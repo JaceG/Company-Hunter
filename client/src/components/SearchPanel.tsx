@@ -65,6 +65,56 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
     onSearch(finalSearchParams);
   };
 
+  const handleEnhancedSearch = async () => {
+    if (!searchParams.businessType.trim()) {
+      toast({
+        title: "Business type is required",
+        description: "Please enter a business type for the AI-powered search",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // Call the enhanced search endpoint
+      const response = await fetch('/api/businesses/search/enhanced', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          businessType: searchParams.businessType,
+          location: "Ohio, USA",
+          radius: "0",
+          maxResults: "500" // Higher limit for enhanced search
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Enhanced search failed');
+      }
+
+      const data = await response.json();
+      
+      toast({
+        title: "Smart Search Complete!",
+        description: `Found ${data.total} businesses using ${data.searchTermsUsed} search terms across ${data.citiesSearched} Ohio cities`,
+      });
+
+      // Trigger a refresh of the results by calling onSearch with empty params
+      // This will fetch the newly saved businesses from storage
+      onSearch({ businessType: "", location: "", radius: "20", maxResults: "100" });
+      
+    } catch (error) {
+      console.error("Enhanced search error:", error);
+      toast({
+        title: "Search Error",
+        description: "Failed to perform enhanced search. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <div className="lg:col-span-4 space-y-6">
       <Card>
@@ -153,7 +203,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
               </Select>
             </div>
             
-            <div className="pt-2">
+            <div className="pt-2 space-y-2">
               <Button 
                 type="submit" 
                 className="w-full bg-primary text-white" 
@@ -173,10 +223,29 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
                       <circle cx="11" cy="11" r="8"></circle>
                       <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                     </svg>
-                    Search Businesses
+                    Quick Search
                   </div>
                 )}
               </Button>
+              
+              <Button 
+                type="button"
+                variant="outline"
+                className="w-full border-green-500 text-green-700 hover:bg-green-50" 
+                disabled={isLoading || !searchParams.businessType.trim()}
+                onClick={() => handleEnhancedSearch()}
+              >
+                <div className="flex items-center">
+                  <svg className="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                  </svg>
+                  Smart Search All Ohio (AI-Powered)
+                </div>
+              </Button>
+              
+              <p className="text-xs text-gray-500 text-center">
+                Smart Search uses AI to find hundreds more businesses across Ohio with intelligent search terms
+              </p>
             </div>
           </form>
         </CardContent>
