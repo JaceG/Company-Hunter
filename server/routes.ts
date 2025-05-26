@@ -13,6 +13,7 @@ import {
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
+import OpenAI from "openai";
 import { 
   connectToMongoDB, 
   createUser, 
@@ -33,6 +34,11 @@ import {
   getBusinessesForList
 } from './mongodb';
 import { authenticate, optionalAuth } from './middleware/auth';
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 // Helper functions for comparing businesses
 function normalizeDomain(url: string): string {
