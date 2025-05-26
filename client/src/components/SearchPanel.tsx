@@ -77,7 +77,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 
     try {
       // Call the enhanced search endpoint
-      const response = await fetch('/api/businesses/search/enhanced', {
+      const response = await fetch('/api/businesses/ai-search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -90,11 +90,11 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Enhanced search failed');
-      }
-
       const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Enhanced search failed');
+      }
       
       toast({
         title: "AI Job Search Complete!",
@@ -109,7 +109,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
       console.error("Enhanced search error:", error);
       toast({
         title: "Search Error",
-        description: "Failed to perform enhanced search. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to perform enhanced search. Please try again.",
         variant: "destructive"
       });
     }

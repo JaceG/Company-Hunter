@@ -879,7 +879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Enhanced AI-powered comprehensive search
-  app.post("/api/businesses/search/enhanced", optionalAuth, async (req, res) => {
+  app.post("/api/businesses/ai-search", optionalAuth, async (req, res) => {
     try {
       const searchParams = searchParamsSchema.parse(req.body);
       const { businessType } = searchParams;
