@@ -11,7 +11,7 @@ import { Business } from "@/lib/types";
 import { exportToCSV, downloadCSV, copyToClipboard } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useImportBusinesses } from "@/hooks/useBusiness";
-import { useImportFromSearch } from "@/hooks/useSavedBusinesses";
+import { useImportFromSearch, useSavedBusinesses } from "@/hooks/useSavedBusinesses";
 import { queryClient } from "@/lib/queryClient";
 
 interface ResultsPanelProps {
@@ -27,15 +27,13 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
   const [hideDuplicates, setHideDuplicates] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importFromSearch = useImportFromSearch();
+  const { data: savedBusinesses } = useSavedBusinesses();
   
-  // Calculate duplicates properly by checking for actual duplicates in the results
-  const businessesWithDuplicateDetection = businesses.map((business, index) => {
-    // Check if this business appears earlier in the array (mark later occurrences as duplicates)
-    const isDuplicate = businesses.some((otherBusiness, otherIndex) => {
-      if (index <= otherIndex) return false; // Only check businesses that come before this one
-      
+  // Check for duplicates against saved businesses
+  const businessesWithDuplicateDetection = businesses.map(business => {
+    const isDuplicate = savedBusinesses?.some((savedBusiness: any) => {
       // Check website match
-      if (business.website && otherBusiness.website) {
+      if (business.website && savedBusiness.website) {
         const normalizeUrl = (url: string) => {
           return url.toLowerCase()
             .replace(/^https?:\/\//i, '')
@@ -43,28 +41,28 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
             .replace(/\/+$/, '');
         };
         
-        if (normalizeUrl(business.website) === normalizeUrl(otherBusiness.website)) {
+        if (normalizeUrl(business.website) === normalizeUrl(savedBusiness.website)) {
           return true;
         }
       }
       
       // Check name match
-      if (business.name && otherBusiness.name) {
+      if (business.name && savedBusiness.name) {
         const normalizeName = (name: string) => {
           return name.toLowerCase()
             .replace(/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i, '')
             .trim();
         };
         
-        if (normalizeName(business.name) === normalizeName(otherBusiness.name)) {
+        if (normalizeName(business.name) === normalizeName(savedBusiness.name)) {
           return true;
         }
       }
       
       return false;
-    });
+    }) || false;
     
-    return { ...business, isDuplicate: isDuplicate || business.isDuplicate || false };
+    return { ...business, isDuplicate };
   });
 
   // Filter out duplicates if the toggle is on
