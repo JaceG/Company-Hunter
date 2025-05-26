@@ -391,7 +391,13 @@ export default function AccountPortal() {
 
     // Helper functions for normalization
     const normalizeUrl = (url: string) => {
-      if (!url) return '';
+      if (!url || url === 'null' || url === 'undefined') return '';
+      
+      // Skip if it's clearly not a URL (like "LLC", "Inc.", etc.)
+      if (/^(llc|inc\.?|corp\.?|ltd\.?|corporation)$/i.test(url.trim())) {
+        return '';
+      }
+      
       const normalized = url.toLowerCase()
         .replace(/^https?:\/\//i, '')
         .replace(/^www\./i, '')
@@ -400,7 +406,7 @@ export default function AccountPortal() {
     };
 
     const normalizeName = (name: string) => {
-      if (!name) return '';
+      if (!name || name === 'null' || name === 'undefined') return '';
       const normalized = name.toLowerCase()
         .replace(/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i, '')
         .trim();
