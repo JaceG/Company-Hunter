@@ -1,26 +1,24 @@
-import { pgTable, text, serial, integer, boolean } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// PostgreSQL business table (for temporary storage)
-export const businesses = pgTable("businesses", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  website: text("website"),
-  location: text("location"),
-  distance: text("distance"),
-  isBadLead: boolean("is_bad_lead").default(false).notNull(),
-  notes: text("notes"),
-  isDuplicate: boolean("is_duplicate").default(false),
-  careerLink: text("career_link"),
+// Business schema for in-memory search results
+export const businessSchema = z.object({
+  id: z.number().optional(),
+  name: z.string(),
+  website: z.string().optional(),
+  location: z.string().optional(),
+  distance: z.string().optional(),
+  isBadLead: z.boolean().default(false),
+  notes: z.string().optional(),
+  isDuplicate: z.boolean().default(false).optional(),
+  careerLink: z.string().optional(),
 });
 
-export const insertBusinessSchema = createInsertSchema(businesses).omit({
+export const insertBusinessSchema = businessSchema.omit({
   id: true,
 });
 
 export type InsertBusiness = z.infer<typeof insertBusinessSchema>;
-export type Business = typeof businesses.$inferSelect;
+export type Business = z.infer<typeof businessSchema>;
 
 // MongoDB schemas (for user accounts and saved business lists)
 export const userSchema = z.object({

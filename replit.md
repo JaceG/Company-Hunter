@@ -18,21 +18,22 @@ Preferred communication style: Simple, everyday language.
 ### Backend
 - Node.js with Express.js for API endpoints
 - Integration with Google Places API for business search functionality
-- Drizzle ORM for database interactions (prepared for PostgreSQL)
+- MongoDB Atlas for user data and saved companies
 - TypeScript for type safety across the stack
 
 ### Data Storage
-- PostgreSQL database (setup in the Replit configuration but not fully implemented)
-- Schema defined with Drizzle ORM for storing business information
-- In-memory storage fallback implementation for development
+- MongoDB Atlas for user accounts and saved business lists (persistent)
+- In-memory storage for temporary search results (fast and efficient)
+- No PostgreSQL dependency - simplified architecture
 
 ## Key Components
 
 ### Backend Components
 - `server/index.ts`: Entry point for the Express server
 - `server/routes.ts`: API route definitions for business search and management
-- `server/storage.ts`: Data storage abstraction for accessing business data
-- `shared/schema.ts`: Database schema definitions using Drizzle ORM
+- `server/storage.ts`: In-memory storage for temporary search results
+- `server/mongodb.ts`: MongoDB Atlas connection and user/business operations
+- `shared/schema.ts`: Schema definitions for data validation
 
 ### Frontend Components
 - `client/src/App.tsx`: Main application component with routing
@@ -93,27 +94,28 @@ The application is configured to run on Replit with:
    - Combined into a single deployment package
 
 3. **Database Strategy**:
-   - PostgreSQL is configured in the Replit environment
-   - Drizzle migrations will be used for schema changes
+   - MongoDB Atlas handles user accounts and saved company lists
+   - In-memory storage for fast search result processing
 
 ## Getting Started
 
-1. Ensure the PostgreSQL database is properly set up in your Replit environment
+1. Ensure MongoDB Atlas connection string is configured
 2. Run `npm install` to install all dependencies
 3. Set up the Google Places API key as an environment variable (`GOOGLE_PLACES_API_KEY`)
-4. Run `npm run db:push` to initialize the database schema
+4. Set up OpenAI API key for AI-powered job search features
 5. Start the application with `npm run dev`
 
 ## Development Workflow
 
 1. Backend API endpoint changes should be made in `server/routes.ts`
 2. Frontend components are in `client/src/components/`
-3. Database schema changes should be made in `shared/schema.ts`
-4. After schema changes, run `npm run db:push` to update the database
+3. MongoDB operations are handled in `server/mongodb.ts`
+4. Schema validation changes should be made in `shared/schema.ts`
 5. Use React Query hooks in `client/src/hooks/` for data fetching
 
 ## Troubleshooting
 
-- If the database connection fails, check the `DATABASE_URL` environment variable
+- If MongoDB connection fails, check the MongoDB Atlas connection string
 - For Google Places API issues, verify the API key is correctly set
+- For OpenAI features, ensure the OpenAI API key is configured
 - Frontend build issues can often be resolved by clearing the Vite cache
