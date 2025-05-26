@@ -547,7 +547,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Continue fetching pages until we have enough results or no more pages
       do {
         // Build URL with nextPageToken if we have it
-        let url = `${GOOGLE_PLACES_API_URL}/nearbysearch/json?location=${lat},${lng}&radius=${milesToMeters(Number(radius))}&keyword=${encodeURIComponent(businessType)}&type=establishment&key=${API_KEY}`;
+        // For state-wide searches (radius = "0"), use a large radius to cover the whole state
+        const searchRadius = radius === "0" ? 50000 : milesToMeters(Number(radius)); // 50km for state-wide
+        let url = `${GOOGLE_PLACES_API_URL}/nearbysearch/json?location=${lat},${lng}&radius=${searchRadius}&keyword=${encodeURIComponent(businessType)}&type=establishment&key=${API_KEY}`;
         
         if (nextPageToken) {
           // Need to add pagetoken parameter if we have a token
