@@ -28,10 +28,49 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importFromSearch = useImportFromSearch();
   
+  // Calculate duplicates properly by checking for actual duplicates in the results
+  const businessesWithDuplicateDetection = businesses.map((business, index) => {
+    // Check if this business appears later in the array (find duplicates)
+    const isDuplicate = businesses.some((otherBusiness, otherIndex) => {
+      if (index >= otherIndex) return false; // Only check businesses that come after this one
+      
+      // Check website match
+      if (business.website && otherBusiness.website) {
+        const normalizeUrl = (url: string) => {
+          return url.toLowerCase()
+            .replace(/^https?:\/\//i, '')
+            .replace(/^www\./i, '')
+            .replace(/\/+$/, '');
+        };
+        
+        if (normalizeUrl(business.website) === normalizeUrl(otherBusiness.website)) {
+          return true;
+        }
+      }
+      
+      // Check name match
+      if (business.name && otherBusiness.name) {
+        const normalizeName = (name: string) => {
+          return name.toLowerCase()
+            .replace(/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i, '')
+            .trim();
+        };
+        
+        if (normalizeName(business.name) === normalizeName(otherBusiness.name)) {
+          return true;
+        }
+      }
+      
+      return false;
+    });
+    
+    return { ...business, isDuplicate: isDuplicate || business.isDuplicate || false };
+  });
+
   // Filter out duplicates if the toggle is on
   const filteredBusinesses = hideDuplicates 
-    ? businesses.filter(business => !business.isDuplicate)
-    : businesses;
+    ? businessesWithDuplicateDetection.filter(business => !business.isDuplicate)
+    : businessesWithDuplicateDetection;
   
   const handleDownloadCSV = () => {
     const csvContent = exportToCSV(filteredBusinesses);
@@ -172,7 +211,7 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
                   Hide Duplicate Companies
                 </Label>
                 <span className="text-xs text-gray-500">
-                  ({businesses.filter(b => b.isDuplicate).length} duplicates found)
+                  ({businessesWithDuplicateDetection.filter(b => b.isDuplicate).length} duplicates found)
                 </span>
               </div>
             </div>
