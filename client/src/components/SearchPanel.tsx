@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { SearchParams } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 
@@ -47,16 +48,21 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
       return;
     }
     
-    if (!searchParams.location.trim()) {
+    if (!searchParams.location.trim() && !searchEntireState) {
       toast({
         title: "Location is required",
-        description: "Please enter a location to search in",
+        description: "Please enter a location or select state-wide search",
         variant: "destructive"
       });
       return;
     }
     
-    onSearch(searchParams);
+    // Modify search parameters for state-wide search
+    const finalSearchParams = searchEntireState 
+      ? { ...searchParams, location: "Ohio, USA", radius: "0" }
+      : searchParams;
+    
+    onSearch(finalSearchParams);
   };
 
   return (
@@ -91,9 +97,22 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
                 placeholder="Columbus, OH"
                 value={searchParams.location}
                 onChange={handleInputChange}
-                required
+                required={!searchEntireState}
+                disabled={searchEntireState}
               />
-              <p className="mt-1 text-xs text-gray-500">City, state, or address</p>
+              <div className="mt-2 flex items-center space-x-2">
+                <Checkbox 
+                  id="search-entire-state" 
+                  checked={searchEntireState}
+                  onCheckedChange={(checked) => setSearchEntireState(checked === true)}
+                />
+                <Label htmlFor="search-entire-state" className="text-sm">
+                  Search entire state of Ohio (ignores location and radius)
+                </Label>
+              </div>
+              {!searchEntireState && (
+                <p className="mt-1 text-xs text-gray-500">City, state, or address</p>
+              )}
             </div>
             
             <div>
@@ -101,9 +120,10 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
               <Select
                 value={searchParams.radius}
                 onValueChange={(value) => handleSelectChange(value, "radius")}
+                disabled={searchEntireState}
               >
                 <SelectTrigger id="radius">
-                  <SelectValue placeholder="Search radius" />
+                  <SelectValue placeholder={searchEntireState ? "Not applicable for state-wide search" : "Search radius"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="5">5 miles</SelectItem>
