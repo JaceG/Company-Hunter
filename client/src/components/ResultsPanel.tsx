@@ -30,9 +30,9 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
   
   // Calculate duplicates properly by checking for actual duplicates in the results
   const businessesWithDuplicateDetection = businesses.map((business, index) => {
-    // Check if this business appears later in the array (find duplicates)
+    // Check if this business appears earlier in the array (mark later occurrences as duplicates)
     const isDuplicate = businesses.some((otherBusiness, otherIndex) => {
-      if (index >= otherIndex) return false; // Only check businesses that come after this one
+      if (index <= otherIndex) return false; // Only check businesses that come before this one
       
       // Check website match
       if (business.website && otherBusiness.website) {
