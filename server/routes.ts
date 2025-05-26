@@ -48,7 +48,7 @@ async function generateJobFocusedSearchTerms(jobRole: string): Promise<string[]>
       messages: [
         {
           role: "system",
-          content: "You are a job search expert who understands what types of companies hire specific roles. Generate comprehensive search terms for finding companies that would hire a specific job role. Return only a JSON array of strings, no other text."
+          content: "You are a job search expert who understands what types of companies hire specific roles. Generate comprehensive search terms for finding companies that would hire a specific job role. Return ONLY valid JSON in the exact format requested."
         },
         {
           role: "user",
@@ -64,14 +64,15 @@ async function generateJobFocusedSearchTerms(jobRole: string): Promise<string[]>
           If the job role is "graphic designer", include terms like:
           "design agency", "marketing agency", "advertising agency", "branding company", "print shop", "digital marketing company", "creative agency", "web design company", etc.
           
-          Focus on actual business types, not job titles.`
+          Focus on actual business types, not job titles. Return JSON in this exact format: {"terms": ["term1", "term2", "term3"]}`
         }
       ],
       response_format: { type: "json_object" },
     });
 
     const result = JSON.parse(response.choices[0].message.content || '{"terms": []}');
-    return result.terms || [`${jobRole} company`];
+    console.log("OpenAI generated search terms:", result);
+    return result.terms && result.terms.length > 0 ? result.terms : [`${jobRole} company`];
   } catch (error) {
     console.error("Error generating job-focused search terms:", error);
     return [`${jobRole} company`]; // Fallback to basic term
