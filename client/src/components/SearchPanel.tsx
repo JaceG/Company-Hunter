@@ -61,7 +61,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
     <div className="lg:col-span-4 space-y-6">
       <Card>
         <CardContent className="p-6">
-          <h2 className="text-lg font-semibold mb-4 text-secondary flex items-center">
+          <h2 className="text-lg font-semibold mb-4 flex items-center text-[#0c0a09]">
             <svg className="w-5 h-5 mr-2 text-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -71,7 +71,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
           
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
-              <Label htmlFor="businessType" className="text-sm font-medium text-secondary mb-1">Business Type</Label>
+              <Label htmlFor="businessType" className="text-sm font-medium mb-1 text-[#0c0a09]">Business Type</Label>
               <Input
                 id="businessType"
                 placeholder="Software Company, Tech Agency, etc."
@@ -83,7 +83,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
             </div>
             
             <div>
-              <Label htmlFor="location" className="text-sm font-medium text-secondary mb-1">Location</Label>
+              <Label htmlFor="location" className="text-sm font-medium mb-1 text-[#0c0a09]">Location</Label>
               <Input
                 id="location"
                 placeholder="Columbus, OH"
@@ -95,7 +95,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
             </div>
             
             <div>
-              <Label htmlFor="radius" className="text-sm font-medium text-secondary mb-1">Search Radius (miles)</Label>
+              <Label htmlFor="radius" className="text-sm font-medium mb-1 text-[#0c0a09]">Search Radius (miles)</Label>
               <Select
                 value={searchParams.radius}
                 onValueChange={(value) => handleSelectChange(value, "radius")}
@@ -114,7 +114,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
             </div>
             
             <div>
-              <Label htmlFor="maxResults" className="text-sm font-medium text-secondary mb-1">Max Results</Label>
+              <Label htmlFor="maxResults" className="text-sm font-medium mb-1 text-[#0c0a09]">Max Results</Label>
               <Select
                 value={searchParams.maxResults}
                 onValueChange={(value) => handleSelectChange(value, "maxResults")}
@@ -159,7 +159,6 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
           </form>
         </CardContent>
       </Card>
-      
       {/* API Configuration and images have been removed as requested */}
     </div>
   );
