@@ -101,9 +101,8 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
         description: `Found ${data.total} companies that hire "${searchParams.businessType}" using ${data.searchTermsUsed} smart search terms across ${data.citiesSearched} Ohio cities`,
       });
 
-      // Trigger a refresh of the results by calling onSearch with empty params
-      // This will fetch the newly saved businesses from storage
-      onSearch({ businessType: "", location: "", radius: "20", maxResults: "100" });
+      // Trigger a refresh of the results by fetching all businesses
+      window.location.reload(); // Force a complete refresh to show the new results
       
     } catch (error) {
       console.error("Enhanced search error:", error);

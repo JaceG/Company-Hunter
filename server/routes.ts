@@ -75,7 +75,24 @@ async function generateJobFocusedSearchTerms(jobRole: string): Promise<string[]>
     return result.terms && result.terms.length > 0 ? result.terms : [`${jobRole} company`];
   } catch (error) {
     console.error("Error generating job-focused search terms:", error);
-    return [`${jobRole} company`]; // Fallback to basic term
+    // Provide intelligent fallback terms based on common job roles
+    if (jobRole.toLowerCase().includes('web') || jobRole.toLowerCase().includes('developer') || jobRole.toLowerCase().includes('software')) {
+      return [
+        "software company",
+        "web development agency", 
+        "tech startup",
+        "digital marketing agency",
+        "IT consulting",
+        "e-commerce company",
+        "SaaS company",
+        "mobile app development",
+        "custom software development",
+        "digital agency",
+        "technology company",
+        "software development company"
+      ];
+    }
+    return [`${jobRole} company`]; // Final fallback
   }
 }
 
