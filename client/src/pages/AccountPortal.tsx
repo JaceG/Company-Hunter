@@ -380,28 +380,34 @@ export default function AccountPortal() {
 
   // Check for duplicates in existing saved companies
   const checkForExistingDuplicates = () => {
-    if (!savedBusinesses || savedBusinesses.length === 0) return;
+    if (!savedBusinesses || savedBusinesses.length === 0) {
+      console.log('No saved businesses to check');
+      return;
+    }
 
+    console.log(`Checking ${savedBusinesses.length} companies for duplicates...`);
     const duplicates: SavedBusiness[] = [];
     const seen = new Map<string, SavedBusiness>();
 
     // Helper functions for normalization
     const normalizeUrl = (url: string) => {
       if (!url) return '';
-      return url.toLowerCase()
+      const normalized = url.toLowerCase()
         .replace(/^https?:\/\//i, '')
         .replace(/^www\./i, '')
         .replace(/\/+$/, '');
+      return normalized;
     };
 
     const normalizeName = (name: string) => {
       if (!name) return '';
-      return name.toLowerCase()
+      const normalized = name.toLowerCase()
         .replace(/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i, '')
         .trim();
+      return normalized;
     };
 
-    savedBusinesses.forEach((business) => {
+    savedBusinesses.forEach((business, index) => {
       const normalizedWebsite = normalizeUrl(business.website || '');
       const normalizedName = normalizeName(business.name);
       
@@ -409,6 +415,11 @@ export default function AccountPortal() {
       if (normalizedWebsite && normalizedWebsite !== '') {
         const existingByWebsite = seen.get(`website:${normalizedWebsite}`);
         if (existingByWebsite) {
+          console.log(`Website duplicate found:`, {
+            original: { name: existingByWebsite.name, website: existingByWebsite.website },
+            duplicate: { name: business.name, website: business.website },
+            normalizedWebsite
+          });
           // Mark both as duplicates
           if (!duplicates.find(d => d._id === existingByWebsite._id)) {
             duplicates.push(existingByWebsite);
@@ -425,6 +436,11 @@ export default function AccountPortal() {
       if (normalizedName && normalizedName !== '') {
         const existingByName = seen.get(`name:${normalizedName}`);
         if (existingByName) {
+          console.log(`Name duplicate found:`, {
+            original: { name: existingByName.name, website: existingByName.website },
+            duplicate: { name: business.name, website: business.website },
+            normalizedName
+          });
           // Mark both as duplicates
           if (!duplicates.find(d => d._id === existingByName._id)) {
             duplicates.push(existingByName);
@@ -438,6 +454,7 @@ export default function AccountPortal() {
       }
     });
 
+    console.log(`Found ${duplicates.length} total duplicates`);
     setExistingDuplicates(duplicates);
     setShowDuplicatesDialog(true);
   };
