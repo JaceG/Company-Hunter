@@ -523,33 +523,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // First we need to geocode the location to get coordinates
-      const geocodeResponse = await fetch(
-        `${GOOGLE_PLACES_API_URL}/findplacefromtext/json?input=${encodeURIComponent(location)}&inputtype=textquery&fields=geometry&key=${API_KEY}`
-      );
-      
-      const geocodeData = await geocodeResponse.json();
-      
-      if (geocodeData.status !== "OK" || !geocodeData.candidates || geocodeData.candidates.length === 0) {
-        return res.status(400).json({ 
-          message: "Could not find location coordinates",
-          details: geocodeData.status
-        });
-      }
-      
-      const { lat, lng } = geocodeData.candidates[0].geometry.location;
-      
-      // Now search for businesses using the coordinates
       const maxResultsNum = Number(maxResults);
       const businesses = [];
       let nextPageToken = null;
       
-      // Continue fetching pages until we have enough results or no more pages
-      do {
-        // Build URL with nextPageToken if we have it
-        // For state-wide searches (radius = "0"), use a large radius to cover the whole state
-        const searchRadius = radius === "0" ? 50000 : milesToMeters(Number(radius)); // 50km for state-wide
-        let url = `${GOOGLE_PLACES_API_URL}/nearbysearch/json?location=${lat},${lng}&radius=${searchRadius}&keyword=${encodeURIComponent(businessType)}&type=establishment&key=${API_KEY}`;
+      // Use different search approach for state-wide vs local searches
+      const isStateWideSearch = radius === "0";
+      
+      if (isStateWideSearch) {
+        // Use Text Search API for state-wide searches - much better coverage
+        const textQuery = `${businessType} in ${location}`;
+        
+        do {
+          let url = `${GOOGLE_PLACES_API_URL}/textsearch/json?query=${encodeURIComponent(textQuery)}&key=${API_KEY}`;
+          
+          if (nextPageToken) {
+            url += `&pagetoken=${nextPageToken}`;
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+          
+          const placesResponse = await fetch(url);
+          const placesData = await placesResponse.json();
+          
+          if (placesData.status !== "OK" && placesData.status !== "ZERO_RESULTS") {
+            return res.status(400).json({ 
+              message: "Failed to search businesses",
+              details: placesData.status
+            });
+          }
+          
+          nextPageToken = placesData.next_page_token || null;
+          const pageResults = placesData.results || [];
+          const resultsToProcess = pageResults.slice(0, maxResultsNum - businesses.length);
+          
+          // Process results for text search
+          for (const place of resultsToProcess) {
+            const detailsResponse = await fetch(
+              `${GOOGLE_PLACES_API_URL}/details/json?place_id=${place.place_id}&fields=name,website,formatted_address,url&key=${API_KEY}`
+            );
+            
+            const detailsData = await detailsResponse.json();
+            
+            if (detailsData.status === "OK") {
+              const details = detailsData.result;
+              
+              businesses.push({
+                name: details.name || place.name,
+                website: details.website || '',
+                location: details.formatted_address || place.formatted_address || '',
+                distance: 'State-wide search',
+                isBadLead: false,
+                notes: '',
+                careerLink: undefined
+              });
+            }
+          }
+          
+        } while (nextPageToken && businesses.length < maxResultsNum);
+        
+      } else {
+        // Use traditional nearby search for local searches
+        const geocodeResponse = await fetch(
+          `${GOOGLE_PLACES_API_URL}/findplacefromtext/json?input=${encodeURIComponent(location)}&inputtype=textquery&fields=geometry&key=${API_KEY}`
+        );
+        
+        const geocodeData = await geocodeResponse.json();
+        
+        if (geocodeData.status !== "OK" || !geocodeData.candidates || geocodeData.candidates.length === 0) {
+          return res.status(400).json({ 
+            message: "Could not find location coordinates",
+            details: geocodeData.status
+          });
+        }
+        
+        const { lat, lng } = geocodeData.candidates[0].geometry.location;
+        
+        do {
+          let url = `${GOOGLE_PLACES_API_URL}/nearbysearch/json?location=${lat},${lng}&radius=${milesToMeters(Number(radius))}&keyword=${encodeURIComponent(businessType)}&type=establishment&key=${API_KEY}`;
         
         if (nextPageToken) {
           // Need to add pagetoken parameter if we have a token
@@ -619,6 +669,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
       } while (true); // End of do-while loop for pagination
+      
+      } // End of nearby search block
       
       // Get user's saved businesses if user is logged in
       let userSavedBusinesses: any[] = [];
