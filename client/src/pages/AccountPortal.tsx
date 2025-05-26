@@ -38,6 +38,8 @@ export default function AccountPortal() {
   const [showPreview, setShowPreview] = useState<boolean>(false);
   const [existingDuplicates, setExistingDuplicates] = useState<SavedBusiness[]>([]);
   const [showDuplicatesDialog, setShowDuplicatesDialog] = useState<boolean>(false);
+  const [cleanupResults, setCleanupResults] = useState<{fixed: number, issues: string[]}>({fixed: 0, issues: []});
+  const [showCleanupDialog, setShowCleanupDialog] = useState<boolean>(false);
   
   useEffect(() => {
     // Redirect to home if not authenticated
@@ -464,6 +466,62 @@ export default function AccountPortal() {
     setExistingDuplicates(duplicates);
     setShowDuplicatesDialog(true);
   };
+
+  // Clean up data quality issues
+  const cleanUpData = async () => {
+    if (!savedBusinesses || savedBusinesses.length === 0) return;
+
+    console.log(`Cleaning up data for ${savedBusinesses.length} companies...`);
+    const fixes: string[] = [];
+    let fixedCount = 0;
+
+    for (const business of savedBusinesses) {
+      let needsUpdate = false;
+      const updates: Partial<SavedBusiness> = {};
+
+      // Check if website field contains company suffixes instead of URLs
+      if (business.website && /^(llc\.?|inc\.?|corp\.?|ltd\.?|corporation\.?)$/i.test(business.website.trim())) {
+        const suffix = business.website.trim();
+        updates.name = business.name + (business.name.endsWith('.') ? '' : ' ') + suffix;
+        updates.website = '';
+        fixes.push(`Fixed "${business.name}": Moved "${suffix}" from website to company name`);
+        needsUpdate = true;
+      }
+
+      // Check if location field contains URLs
+      if (business.location && /^https?:\/\//.test(business.location.trim())) {
+        if (!business.website || business.website.trim() === '' || business.website === 'null') {
+          updates.website = business.location.trim();
+          updates.location = '';
+          fixes.push(`Fixed "${business.name}": Moved URL from location to website field`);
+          needsUpdate = true;
+        }
+      }
+
+      // Check if website field contains "null" or similar placeholder values
+      if (business.website && /^(null|undefined|n\/a|none|-)$/i.test(business.website.trim())) {
+        updates.website = '';
+        fixes.push(`Fixed "${business.name}": Cleared placeholder website value`);
+        needsUpdate = true;
+      }
+
+      // Apply updates if needed
+      if (needsUpdate && business._id) {
+        try {
+          await updateBusinessMutation.mutateAsync({
+            id: business._id,
+            updates
+          });
+          fixedCount++;
+        } catch (error) {
+          fixes.push(`Error updating "${business.name}": ${error}`);
+        }
+      }
+    }
+
+    setCleanupResults({ fixed: fixedCount, issues: fixes });
+    setShowCleanupDialog(true);
+  };
   
   if (isAuthLoading) {
     return <div className="flex items-center justify-center min-h-screen">
@@ -497,6 +555,12 @@ export default function AccountPortal() {
               <Button variant="outline" onClick={checkForExistingDuplicates}>
                 <AlertCircle className="w-4 h-4 mr-2" />
                 Check for Duplicates
+              </Button>
+              <Button variant="outline" onClick={cleanUpData}>
+                <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                </svg>
+                Clean Up Data
               </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -886,6 +950,46 @@ export default function AccountPortal() {
           
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setShowDuplicatesDialog(false)}>
+              Close
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Data Cleanup Results Dialog */}
+      <AlertDialog open={showCleanupDialog} onOpenChange={setShowCleanupDialog}>
+        <AlertDialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Data Cleanup Results</AlertDialogTitle>
+            <AlertDialogDescription>
+              {cleanupResults.fixed === 0 ? (
+                "Great! No data quality issues were found in your company list."
+              ) : (
+                `Successfully fixed ${cleanupResults.fixed} companies with data quality issues.`
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          {cleanupResults.issues.length > 0 && (
+            <div className="border rounded-md overflow-hidden">
+              <div className="bg-muted p-2 font-medium">
+                Changes Made
+              </div>
+              <div className="max-h-64 overflow-y-auto p-4">
+                <ul className="space-y-2">
+                  {cleanupResults.issues.map((issue, index) => (
+                    <li key={index} className="text-sm flex items-start">
+                      <span className="text-green-600 mr-2">✓</span>
+                      {issue}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+          
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowCleanupDialog(false)}>
               Close
             </AlertDialogCancel>
           </AlertDialogFooter>
