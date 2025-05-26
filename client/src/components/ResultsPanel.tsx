@@ -10,7 +10,7 @@ import ResultsTable from "./ResultsTable";
 import { Business } from "@/lib/types";
 import { exportToCSV, downloadCSV, copyToClipboard } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { useImportBusinesses } from "@/hooks/useBusiness";
+import { useImportBusinesses, useClearAllBusinesses } from "@/hooks/useBusiness";
 import { useImportFromSearch, useSavedBusinesses } from "@/hooks/useSavedBusinesses";
 import { queryClient } from "@/lib/queryClient";
 
@@ -28,6 +28,7 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importFromSearch = useImportFromSearch();
   const { data: savedBusinesses } = useSavedBusinesses();
+  const clearAllBusinesses = useClearAllBusinesses();
   
   // Check for duplicates against saved businesses
   const businessesWithDuplicateDetection = businesses.map(business => {
@@ -193,6 +194,56 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
                   </svg>
                   {copyButtonText}
                 </Button>
+                
+                {businesses.length > 0 && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="inline-flex items-center justify-center border-red-200 text-red-700 hover:bg-red-50"
+                        disabled={isLoading}
+                      >
+                        <svg className="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6"></polyline>
+                          <path d="m19 6-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"></path>
+                          <path d="m8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                        Clear Results
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Clear Search Results</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will remove all {businesses.length} companies from your search results. This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={async () => {
+                            try {
+                              await clearAllBusinesses.mutateAsync();
+                              toast({
+                                title: "Search Results Cleared",
+                                description: "All search results have been removed.",
+                              });
+                            } catch (error) {
+                              toast({
+                                title: "Error",
+                                description: "Failed to clear search results. Please try again.",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                          className="bg-red-600 hover:bg-red-700"
+                        >
+                          Clear All Results
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
               </div>
             </div>
 
