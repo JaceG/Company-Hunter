@@ -36,6 +36,8 @@ export default function AccountPortal() {
   const [csvPreviewData, setCsvPreviewData] = useState<SavedBusiness[]>([]);
   const [duplicatesFound, setDuplicatesFound] = useState<SavedBusiness[]>([]);
   const [showPreview, setShowPreview] = useState<boolean>(false);
+  const [existingDuplicates, setExistingDuplicates] = useState<SavedBusiness[]>([]);
+  const [showDuplicatesDialog, setShowDuplicatesDialog] = useState<boolean>(false);
   
   useEffect(() => {
     // Redirect to home if not authenticated
@@ -375,6 +377,70 @@ export default function AccountPortal() {
       setSortDirection("asc");
     }
   };
+
+  // Check for duplicates in existing saved companies
+  const checkForExistingDuplicates = () => {
+    if (!savedBusinesses || savedBusinesses.length === 0) return;
+
+    const duplicates: SavedBusiness[] = [];
+    const seen = new Map<string, SavedBusiness>();
+
+    // Helper functions for normalization
+    const normalizeUrl = (url: string) => {
+      if (!url) return '';
+      return url.toLowerCase()
+        .replace(/^https?:\/\//i, '')
+        .replace(/^www\./i, '')
+        .replace(/\/+$/, '');
+    };
+
+    const normalizeName = (name: string) => {
+      if (!name) return '';
+      return name.toLowerCase()
+        .replace(/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i, '')
+        .trim();
+    };
+
+    savedBusinesses.forEach((business) => {
+      const normalizedWebsite = normalizeUrl(business.website || '');
+      const normalizedName = normalizeName(business.name);
+      
+      // Check for website duplicates
+      if (normalizedWebsite && normalizedWebsite !== '') {
+        const existingByWebsite = seen.get(`website:${normalizedWebsite}`);
+        if (existingByWebsite) {
+          // Mark both as duplicates
+          if (!duplicates.find(d => d._id === existingByWebsite._id)) {
+            duplicates.push(existingByWebsite);
+          }
+          if (!duplicates.find(d => d._id === business._id)) {
+            duplicates.push(business);
+          }
+        } else {
+          seen.set(`website:${normalizedWebsite}`, business);
+        }
+      }
+
+      // Check for name duplicates
+      if (normalizedName && normalizedName !== '') {
+        const existingByName = seen.get(`name:${normalizedName}`);
+        if (existingByName) {
+          // Mark both as duplicates
+          if (!duplicates.find(d => d._id === existingByName._id)) {
+            duplicates.push(existingByName);
+          }
+          if (!duplicates.find(d => d._id === business._id)) {
+            duplicates.push(business);
+          }
+        } else {
+          seen.set(`name:${normalizedName}`, business);
+        }
+      }
+    });
+
+    setExistingDuplicates(duplicates);
+    setShowDuplicatesDialog(true);
+  };
   
   if (isAuthLoading) {
     return <div className="flex items-center justify-center min-h-screen">
@@ -405,6 +471,10 @@ export default function AccountPortal() {
               <p><strong>Email:</strong> {user?.email}</p>
             </div>
             <div className="flex gap-2">
+              <Button variant="outline" onClick={checkForExistingDuplicates}>
+                <AlertCircle className="w-4 h-4 mr-2" />
+                Check for Duplicates
+              </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline">
@@ -721,6 +791,83 @@ export default function AccountPortal() {
           )}
         </CardContent>
       </Card>
+
+      {/* Duplicates Check Dialog */}
+      <AlertDialog open={showDuplicatesDialog} onOpenChange={setShowDuplicatesDialog}>
+        <AlertDialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Duplicate Companies Found</AlertDialogTitle>
+            <AlertDialogDescription>
+              {existingDuplicates.length === 0 ? (
+                "Great news! No duplicates were found in your company list."
+              ) : (
+                `Found ${existingDuplicates.length} duplicate companies in your saved list. Review and remove duplicates as needed.`
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          {existingDuplicates.length > 0 && (
+            <div className="border rounded-md overflow-hidden">
+              <div className="bg-muted p-2 font-medium">
+                Duplicate Companies
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Company Name</TableHead>
+                      <TableHead>Website</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {existingDuplicates.map((business) => (
+                      <TableRow key={business._id}>
+                        <TableCell className="font-medium">{business.name}</TableCell>
+                        <TableCell>
+                          {business.website && (
+                            <a 
+                              href={business.website} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline flex items-center"
+                            >
+                              {business.website}
+                              <ArrowUpRightFromSquare className="w-3 h-3 ml-1" />
+                            </a>
+                          )}
+                        </TableCell>
+                        <TableCell>{business.location}</TableCell>
+                        <TableCell>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              if (business._id) {
+                                deleteBusinessMutation.mutate(business._id);
+                              }
+                            }}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+          
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowDuplicatesDialog(false)}>
+              Close
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
