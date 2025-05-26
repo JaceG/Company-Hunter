@@ -23,6 +23,8 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
     radius: "20",
     maxResults: "100"
   });
+  
+  const [searchEntireState, setSearchEntireState] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
