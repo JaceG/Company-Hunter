@@ -40,29 +40,41 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// AI-powered search term and location generation
-async function generateSearchTerms(businessType: string): Promise<string[]> {
+// AI-powered search term and location generation for job-focused searches
+async function generateJobFocusedSearchTerms(jobRole: string): Promise<string[]> {
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
       messages: [
         {
           role: "system",
-          content: "You are a business search expert. Generate comprehensive search term variations for finding businesses. Return only a JSON array of strings, no other text."
+          content: "You are a job search expert who understands what types of companies hire specific roles. Generate comprehensive search terms for finding companies that would hire a specific job role. Return only a JSON array of strings, no other text."
         },
         {
           role: "user",
-          content: `Generate 10-15 different search term variations for "${businessType}". Include synonyms, industry terms, and related business types. For example, if input is "software company", include terms like "tech company", "software development", "IT services", "custom software", "software solutions", etc.`
+          content: `Generate 12-18 search terms for companies that would likely hire "${jobRole}". Think about:
+          - Different company types in that industry
+          - Related business sectors
+          - Company sizes (startups, agencies, enterprises)
+          - Specific niches within the field
+          
+          For example, if the job role is "web developer", include terms like:
+          "software company", "web development agency", "digital marketing agency", "tech startup", "IT consulting", "e-commerce company", "SaaS company", "mobile app development", "custom software development", "digital agency", "marketing technology company", etc.
+          
+          If the job role is "graphic designer", include terms like:
+          "design agency", "marketing agency", "advertising agency", "branding company", "print shop", "digital marketing company", "creative agency", "web design company", etc.
+          
+          Focus on actual business types, not job titles.`
         }
       ],
       response_format: { type: "json_object" },
     });
 
     const result = JSON.parse(response.choices[0].message.content || '{"terms": []}');
-    return result.terms || [businessType];
+    return result.terms || [`${jobRole} company`];
   } catch (error) {
-    console.error("Error generating search terms:", error);
-    return [businessType]; // Fallback to original term
+    console.error("Error generating job-focused search terms:", error);
+    return [`${jobRole} company`]; // Fallback to basic term
   }
 }
 
@@ -889,10 +901,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log("Starting enhanced AI-powered search...");
       
-      // Generate comprehensive search terms using OpenAI
-      console.log("Generating search terms with OpenAI...");
-      const searchTerms = await generateSearchTerms(businessType);
-      console.log(`Generated ${searchTerms.length} search terms:`, searchTerms);
+      // Generate job-focused search terms using OpenAI
+      console.log("Generating job-focused search terms with OpenAI...");
+      const searchTerms = await generateJobFocusedSearchTerms(businessType);
+      console.log(`Generated ${searchTerms.length} search terms for companies that hire "${businessType}":`, searchTerms);
       
       // Get comprehensive list of Ohio cities
       console.log("Getting Ohio cities with OpenAI...");

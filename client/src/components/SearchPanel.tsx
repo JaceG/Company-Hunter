@@ -68,8 +68,8 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
   const handleEnhancedSearch = async () => {
     if (!searchParams.businessType.trim()) {
       toast({
-        title: "Business type is required",
-        description: "Please enter a business type for the AI-powered search",
+        title: "Job role is required",
+        description: "Please enter your job role for the AI-powered company search",
         variant: "destructive"
       });
       return;
@@ -83,7 +83,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          businessType: searchParams.businessType,
+          businessType: searchParams.businessType, // This now represents the job role
           location: "Ohio, USA",
           radius: "0",
           maxResults: "500" // Higher limit for enhanced search
@@ -97,8 +97,8 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
       const data = await response.json();
       
       toast({
-        title: "Smart Search Complete!",
-        description: `Found ${data.total} businesses using ${data.searchTermsUsed} search terms across ${data.citiesSearched} Ohio cities`,
+        title: "AI Job Search Complete!",
+        description: `Found ${data.total} companies that hire "${searchParams.businessType}" using ${data.searchTermsUsed} smart search terms across ${data.citiesSearched} Ohio cities`,
       });
 
       // Trigger a refresh of the results by calling onSearch with empty params
@@ -121,23 +121,23 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
         <CardContent className="p-6">
           <h2 className="text-lg font-semibold mb-4 flex items-center text-[#0c0a09]">
             <svg className="w-5 h-5 mr-2 text-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
             </svg>
-            Search Criteria
+            Find Companies That Would Hire You
           </h2>
           
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
-              <Label htmlFor="businessType" className="text-sm font-medium mb-1 text-[#0c0a09]">Business Type</Label>
+              <Label htmlFor="businessType" className="text-sm font-medium mb-1 text-[#0c0a09]">Your Job Role</Label>
               <Input
                 id="businessType"
-                placeholder="Software Company, Tech Agency, etc."
+                placeholder="e.g., Web Developer, Graphic Designer, Marketing Manager, Accountant"
                 value={searchParams.businessType}
                 onChange={handleInputChange}
                 required
               />
-              <p className="mt-1 text-xs text-gray-500">Enter the type of business you're looking for</p>
+              <p className="mt-1 text-xs text-gray-500">Enter your job role to find companies that would hire you</p>
             </div>
             
             <div>
@@ -239,12 +239,12 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
                   <svg className="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
                   </svg>
-                  Smart Search All Ohio (AI-Powered)
+                  AI Job Search - All Ohio Companies
                 </div>
               </Button>
               
               <p className="text-xs text-gray-500 text-center">
-                Smart Search uses AI to find hundreds more businesses across Ohio with intelligent search terms
+                AI finds companies that would hire your role across all Ohio cities using smart business type variations
               </p>
             </div>
           </form>
