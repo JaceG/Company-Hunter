@@ -29,6 +29,8 @@ export default function AccountPortal() {
   const [filterRecentOnly, setFilterRecentOnly] = useState(false);
   const [filterColumbus20Miles, setFilterColumbus20Miles] = useState(false);
   const [columbusCoords, setColumbusCoords] = useState<{lat: number, lng: number} | null>(null);
+  const [businessCoords, setBusinessCoords] = useState<Map<string, {lat: number, lng: number}>>(new Map());
+  const [geocodingInProgress, setGeocodingInProgress] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<keyof SavedBusiness>("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -374,13 +376,34 @@ export default function AccountPortal() {
       // Apply recent only filter
       const recentMatch = !filterRecentOnly || isRecentlyAdded(business);
       
-      // Apply Columbus 20-mile radius filter
-      // Note: This is a simplified check - for full implementation, 
-      // we would need to geocode each business address and calculate distance
-      const columbusMatch = !filterColumbus20Miles || 
-        (business.location && business.location.toLowerCase().includes('columbus')) ||
-        (business.location && business.location.toLowerCase().includes('ohio')) ||
-        (business.location && /\boh\b/i.test(business.location));
+      // Apply Columbus 20-mile radius filter using coordinates
+      let columbusMatch = true;
+      if (filterColumbus20Miles) {
+        if (!business._id || !business.location) {
+          columbusMatch = false;
+        } else if (businessCoords.has(business._id)) {
+          // We have coordinates, calculate distance
+          const coords = businessCoords.get(business._id)!;
+          if (columbusCoords) {
+            const distance = calculateDistance(
+              columbusCoords.lat,
+              columbusCoords.lng,
+              coords.lat,
+              coords.lng
+            );
+            columbusMatch = distance <= 20;
+          } else {
+            columbusMatch = false;
+          }
+        } else {
+          // No coordinates yet - trigger geocoding for this business
+          if (!geocodingInProgress.has(business._id)) {
+            geocodeBusiness(business);
+          }
+          // For now, show the business while geocoding is in progress
+          columbusMatch = true;
+        }
+      }
       
       return searchMatch && badLeadMatch && recentMatch && columbusMatch;
     })
@@ -577,6 +600,59 @@ export default function AccountPortal() {
       console.error('Failed to geocode address:', error);
     }
     return null;
+  };
+
+  // Geocode a business address and cache the result
+  const geocodeBusiness = async (business: SavedBusiness) => {
+    if (!business.location || !business._id) return null;
+    
+    // Check if we already have coordinates for this business
+    if (businessCoords.has(business._id)) {
+      return businessCoords.get(business._id)!;
+    }
+    
+    // Check if geocoding is already in progress for this business
+    if (geocodingInProgress.has(business._id)) {
+      return null;
+    }
+    
+    // Start geocoding
+    setGeocodingInProgress(prev => new Set(prev).add(business._id!));
+    
+    try {
+      const coords = await getCoordinatesFromAddress(business.location);
+      if (coords) {
+        setBusinessCoords(prev => new Map(prev).set(business._id!, coords));
+        return coords;
+      }
+    } catch (error) {
+      console.error(`Failed to geocode business ${business.name}:`, error);
+    } finally {
+      setGeocodingInProgress(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(business._id!);
+        return newSet;
+      });
+    }
+    
+    return null;
+  };
+
+  // Check if a business is within 20 miles of Columbus
+  const isWithinColumbusRadius = async (business: SavedBusiness): Promise<boolean> => {
+    if (!columbusCoords || !business.location) return false;
+    
+    const businessCoordsData = await geocodeBusiness(business);
+    if (!businessCoordsData) return false;
+    
+    const distance = calculateDistance(
+      columbusCoords.lat,
+      columbusCoords.lng,
+      businessCoordsData.lat,
+      businessCoordsData.lng
+    );
+    
+    return distance <= 20; // Within 20 miles
   };
   
   if (isAuthLoading) {
@@ -840,7 +916,14 @@ export default function AccountPortal() {
                   checked={filterColumbus20Miles}
                   onCheckedChange={(checked) => setFilterColumbus20Miles(checked === true)}
                 />
-                <Label htmlFor="filter-columbus-20miles">Within 20 miles of Columbus, OH</Label>
+                <Label htmlFor="filter-columbus-20miles" className="flex items-center gap-2">
+                  Within 20 miles of Columbus, OH
+                  {filterColumbus20Miles && geocodingInProgress.size > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      (Calculating distances... {geocodingInProgress.size} remaining)
+                    </span>
+                  )}
+                </Label>
               </div>
             </div>
           </div>
