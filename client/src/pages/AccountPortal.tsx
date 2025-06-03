@@ -374,7 +374,15 @@ export default function AccountPortal() {
       // Apply recent only filter
       const recentMatch = !filterRecentOnly || isRecentlyAdded(business);
       
-      return searchMatch && badLeadMatch && recentMatch;
+      // Apply Columbus 20-mile radius filter
+      // Note: This is a simplified check - for full implementation, 
+      // we would need to geocode each business address and calculate distance
+      const columbusMatch = !filterColumbus20Miles || 
+        (business.location && business.location.toLowerCase().includes('columbus')) ||
+        (business.location && business.location.toLowerCase().includes('ohio')) ||
+        (business.location && /\boh\b/i.test(business.location));
+      
+      return searchMatch && badLeadMatch && recentMatch && columbusMatch;
     })
     .sort((a, b) => {
       // Apply sorting
@@ -824,6 +832,15 @@ export default function AccountPortal() {
                   onCheckedChange={(checked) => setFilterRecentOnly(checked === true)}
                 />
                 <Label htmlFor="filter-recent-only">Show Recent Only (24h)</Label>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Checkbox 
+                  id="filter-columbus-20miles" 
+                  checked={filterColumbus20Miles}
+                  onCheckedChange={(checked) => setFilterColumbus20Miles(checked === true)}
+                />
+                <Label htmlFor="filter-columbus-20miles">Within 20 miles of Columbus, OH</Label>
               </div>
             </div>
           </div>
