@@ -1144,6 +1144,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Geocode address to get coordinates using Google Maps API
+  app.get("/api/geocode", async (req, res) => {
+    try {
+      const { address } = req.query;
+      
+      if (!address) {
+        return res.status(400).json({ message: "Address parameter is required" });
+      }
+
+      if (!API_KEY) {
+        return res.status(500).json({ 
+          message: "Google Places API key is not configured"
+        });
+      }
+
+      const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address as string)}&key=${API_KEY}`;
+      
+      const response = await fetch(geocodeUrl);
+      const data = await response.json();
+      
+      if (data.status === 'OK' && data.results.length > 0) {
+        const location = data.results[0].geometry.location;
+        res.json({
+          coordinates: {
+            lat: location.lat,
+            lng: location.lng
+          },
+          formatted_address: data.results[0].formatted_address
+        });
+      } else {
+        res.status(404).json({ message: "Address not found" });
+      }
+    } catch (error) {
+      console.error("Error geocoding address:", error);
+      res.status(500).json({ message: "Failed to geocode address" });
+    }
+  });
+
   // Helper function to calculate distance using Haversine formula
   function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 3958.8; // Earth's radius in miles

@@ -27,6 +27,8 @@ export default function AccountPortal() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterBadLeads, setFilterBadLeads] = useState(false);
   const [filterRecentOnly, setFilterRecentOnly] = useState(false);
+  const [filterColumbus20Miles, setFilterColumbus20Miles] = useState(false);
+  const [columbusCoords, setColumbusCoords] = useState<{lat: number, lng: number} | null>(null);
   const [sortField, setSortField] = useState<keyof SavedBusiness>("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -47,6 +49,25 @@ export default function AccountPortal() {
       setLocation("/");
     }
   }, [isAuthLoading, isAuthenticated, setLocation]);
+
+  // Get Columbus, Ohio coordinates when location filter is enabled
+  useEffect(() => {
+    if (filterColumbus20Miles && !columbusCoords) {
+      getColumbusCoordinates();
+    }
+  }, [filterColumbus20Miles, columbusCoords]);
+
+  const getColumbusCoordinates = async () => {
+    try {
+      const response = await fetch(`/api/geocode?address=Columbus,OH`);
+      if (response.ok) {
+        const data = await response.json();
+        setColumbusCoords(data.coordinates);
+      }
+    } catch (error) {
+      console.error('Failed to get Columbus coordinates:', error);
+    }
+  };
   
   // Parse CSV content into business objects
   const parseCSVContent = (content: string) => {
@@ -521,6 +542,33 @@ export default function AccountPortal() {
 
     setCleanupResults({ fixed: fixedCount, issues: fixes });
     setShowCleanupDialog(true);
+  };
+
+  // Calculate distance between two coordinates using Haversine formula
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 3958.8; // Earth's radius in miles
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  // Get coordinates from address using backend geocoding
+  const getCoordinatesFromAddress = async (address: string): Promise<{lat: number, lng: number} | null> => {
+    try {
+      const response = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
+      if (response.ok) {
+        const data = await response.json();
+        return data.coordinates;
+      }
+    } catch (error) {
+      console.error('Failed to geocode address:', error);
+    }
+    return null;
   };
   
   if (isAuthLoading) {
