@@ -80,6 +80,8 @@ export default function AccountPortal() {
       if (response.ok) {
         const data = await response.json();
         return data.coordinates;
+      } else {
+        console.error('Geocoding failed:', response.status, response.statusText);
       }
     } catch (error) {
       console.error('Failed to geocode address:', error);
