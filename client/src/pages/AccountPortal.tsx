@@ -174,7 +174,9 @@ export default function AccountPortal() {
         } else {
           // No coordinates yet - trigger geocoding for this business
           if (!geocodingInProgress.has(business._id)) {
-            geocodeBusiness(business);
+            geocodeBusiness(business).catch(error => {
+              console.error('Geocoding error:', error);
+            });
           }
           // For now, show the business while geocoding is in progress
           columbusMatch = true;
