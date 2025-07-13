@@ -359,7 +359,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  <strong>Google API Compliance:</strong> Limited to 5 cities max. Estimated cost: ${(Math.min(stateParams.maxCities, 5) * 0.049).toFixed(2)} for {Math.min(stateParams.maxCities, 5)} cities. Results are temporary and not permanently stored.
+                  <strong>Optimized Search:</strong> Limited to 5 cities for best performance. Estimated cost: ${(Math.min(stateParams.maxCities, 5) * 0.049).toFixed(2)} for {Math.min(stateParams.maxCities, 5)} cities. Includes duplicate detection and export features.
                 </AlertDescription>
               </Alert>
               

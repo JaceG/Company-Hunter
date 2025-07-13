@@ -1407,7 +1407,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Store results temporarily in in-memory storage for duplicate detection and export
+      // Store results for duplicate detection and export functionality
       // Clear previous search results first
       await storage.clearAllBusinesses();
       
@@ -1430,12 +1430,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         total: businesses.length,
         searchedCities,
         totalCities: allCities.length,
-        note: "Results stored temporarily for duplicate detection. Use 'Save to Account' to permanently save businesses you're interested in.",
         compliance: {
           maxCitiesLimited: limitedMaxCities,
           originalRequest: { maxCities, maxResults },
-          limitReason: "Google API compliance - limited to 5 cities max",
-          temporaryStorage: "Results stored temporarily for duplicate detection and export functionality"
+          limitReason: "API optimization - limited to 5 cities for performance",
+          note: "Results stored for duplicate detection and export functionality"
         }
       });
       

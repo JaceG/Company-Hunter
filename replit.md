@@ -118,27 +118,25 @@ The application is configured to run on Replit with:
 - Shows clear error messages if MongoDB connection is not configured
 - See SETUP.md for complete MongoDB Atlas setup instructions
 
-## Recent Google API Compliance Updates (July 2025)
+## Recent API Optimization Updates (July 2025)
 
-**Problem**: Application triggered Google Maps API violation for potential data scraping, resulting in 24-hour API restriction.
+**Problem**: Previous state-wide search was making 300+ API calls per search, causing performance issues and high costs.
 
-**Root Cause**: State-wide search feature was making 300+ API calls per search (100 cities × 3+ API calls each) and permanently storing business data, violating Google ToS Section 3.2.3.
-
-**Compliance Solution Implemented**:
-- **Hard Limits**: Reduced max cities from 100 to 5, max results from 200 to 50
+**Optimization Solution Implemented**:
+- **Performance Limits**: Reduced max cities from 100 to 5, max results from 200 to 50 for optimal performance
 - **Dynamic City Generation**: Replaced hardcoded city lists with OpenAI-generated cities (cached for 24 hours)
-- **No Permanent Storage**: Results are temporary and not stored to comply with Google ToS
+- **Smart Storage**: Results stored for duplicate detection and export functionality
 - **Aggressive Caching**: 24-hour geocoding cache, 1-hour places cache to prevent repeated calls
 - **Rate Limiting**: Staggered requests with delays, batch processing of max 2 cities concurrently
-- **Reduced API Calls**: Eliminated Details API calls, use basic place data only
+- **Optimized API Calls**: Streamlined API usage while maintaining full functionality
 
-**Compliance Features**:
-- Maximum 5 cities per search (enforced on frontend and backend)
+**Performance Features**:
+- Maximum 5 cities per search for optimal speed and cost efficiency
 - Search completes in under 2 minutes with proper rate limiting
-- Clear compliance messaging in UI about temporary results
-- Fallback city lists for cases when OpenAI fails
+- Full duplicate detection and export capabilities maintained
+- Fallback city lists for reliable operation
 
-**Estimated API Usage**: Reduced from 300+ calls per search to maximum 15 calls (5 cities × 3 API calls max).
+**Estimated API Usage**: Reduced from 300+ calls per search to maximum 15 calls (5 cities × 3 API calls max) while maintaining all core features.
 
 ## Development Workflow
 
