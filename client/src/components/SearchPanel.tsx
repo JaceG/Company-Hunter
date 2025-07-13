@@ -212,28 +212,28 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
   ];
 
   return (
-    <Card className="w-full">
+    <Card className="w-full h-fit">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-lg">
           <MapPin className="h-5 w-5" />
           Business Search
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         {!apiKeysStatus?.hasGooglePlacesKey && (
           <Alert className="mb-4">
             <Key className="h-4 w-4" />
-            <AlertDescription>
+            <AlertDescription className="text-sm break-words">
               Google Places API key required for searching. Please set up your API keys in Account Portal.
             </AlertDescription>
           </Alert>
         )}
 
         <Tabs defaultValue="single" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="single">Single Location</TabsTrigger>
-            <TabsTrigger value="state">State Search</TabsTrigger>
-            <TabsTrigger value="suggestions">AI Suggestions</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3 text-xs">
+            <TabsTrigger value="single" className="text-xs">Single</TabsTrigger>
+            <TabsTrigger value="state" className="text-xs">State</TabsTrigger>
+            <TabsTrigger value="suggestions" className="text-xs">AI</TabsTrigger>
           </TabsList>
           
           <TabsContent value="single" className="space-y-4">
