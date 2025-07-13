@@ -45,7 +45,7 @@ function SearchResults({ query }: { query: string }) {
 export default function AccountPortal() {
   const { user, isLoading: isAuthLoading, isAuthenticated } = useAuth();
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(50);
+  const [pageSize] = useState(200); // Increased from 50 to catch more companies
   const { data: savedBusinessesData, isLoading: isBusinessesLoading, error } = useSavedBusinesses(currentPage, pageSize);
   const { data: apiKeysStatus } = useApiKeys();
   const updateBusinessMutation = useUpdateSavedBusiness();

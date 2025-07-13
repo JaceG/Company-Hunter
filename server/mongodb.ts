@@ -168,6 +168,8 @@ export async function getSavedBusinesses(userId: string, page: number = 1, limit
   const total = await businessCollection.countDocuments({ userId });
   const totalPages = Math.ceil(total / limit);
   
+  console.log(`getSavedBusinesses: userId=${userId}, page=${page}, limit=${limit}, total=${total}, skip=${skip}`);
+  
   // Find all businesses for this user with pagination
   const businesses = await businessCollection
     .find({ userId })
@@ -175,6 +177,14 @@ export async function getSavedBusinesses(userId: string, page: number = 1, limit
     .skip(skip)
     .limit(limit)
     .toArray();
+    
+  console.log(`Found ${businesses.length} businesses for user ${userId}`);
+  
+  // Check if FYVE is in the results
+  const fyveCompanies = businesses.filter(b => b.name?.toLowerCase().includes('fyve'));
+  if (fyveCompanies.length > 0) {
+    console.log('FYVE companies found in this page:', fyveCompanies.map(c => c.name));
+  }
     
   return {
     businesses: businesses.map(b => ({

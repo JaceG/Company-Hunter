@@ -1234,14 +1234,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         business.location?.toLowerCase().includes(query.toLowerCase())
       );
       
+      console.log(`Search for "${query}": found ${filteredBusinesses.length} matches out of ${result.total} total businesses`);
+      
       res.json({ 
         businesses: filteredBusinesses,
         total: filteredBusinesses.length,
-        searchQuery: query
+        searchQuery: query,
+        totalInDatabase: result.total
       });
     } catch (error) {
       console.error("Error searching saved businesses:", error);
       res.status(500).json({ message: "An error occurred while searching businesses" });
+    }
+  });
+
+  // Debug endpoint to get ALL businesses without pagination
+  app.get("/api/my/businesses/all", authenticate, async (req, res) => {
+    try {
+      const userId = req.user!.userId;
+      
+      // Get all businesses without pagination
+      const result = await getSavedBusinesses(userId, 1, 10000); // Very high limit to get all
+      
+      console.log(`User ${userId} has ${result.total} total businesses`);
+      
+      // Check for FYVE specifically
+      const fyveBusinesses = result.businesses.filter(b => 
+        b.name?.toLowerCase().includes('fyve')
+      );
+      
+      if (fyveBusinesses.length > 0) {
+        console.log('FYVE businesses found:', fyveBusinesses.map(b => ({ name: b.name, _id: b._id })));
+      } else {
+        console.log('No FYVE businesses found in database for this user');
+      }
+      
+      res.json({ 
+        businesses: result.businesses,
+        total: result.total,
+        fyveFound: fyveBusinesses.length > 0,
+        fyveBusinesses: fyveBusinesses
+      });
+    } catch (error) {
+      console.error("Error getting all saved businesses:", error);
+      res.status(500).json({ message: "An error occurred while getting all businesses" });
     }
   });
 
