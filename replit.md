@@ -99,11 +99,24 @@ The application is configured to run on Replit with:
 
 ## Getting Started
 
-1. Ensure MongoDB Atlas connection string is configured
-2. Run `npm install` to install all dependencies
-3. Set up the Google Places API key as an environment variable (`GOOGLE_PLACES_API_KEY`)
-4. Set up OpenAI API key for AI-powered job search features
-5. Start the application with `npm run dev`
+### For Users Setting Up Their Own Instance:
+1. **MongoDB Setup**: Create a MongoDB Atlas account and cluster (see SETUP.md for detailed instructions)
+2. **Environment Variables**: Configure `MONGODB_URI` with your MongoDB Atlas connection string
+3. **Dependencies**: Run `npm install` to install all dependencies
+4. **API Keys**: Set up `GOOGLE_PLACES_API_KEY` and `OPENAI_API_KEY` as environment variables (optional - users can provide their own)
+5. **Start**: Run `npm run dev` to start the application
+
+### Environment Variable Priority:
+- The app checks for server-level API keys first (GOOGLE_PLACES_API_KEY, OPENAI_API_KEY)
+- If server keys exist, all users see APIs as "configured" 
+- Users can still provide their own keys which take priority over server keys
+- If no server keys exist, users must configure their own through the Account Portal
+
+### MongoDB Configuration:
+- No hardcoded connection strings - uses environment variables only
+- Supports both `MONGODB_URI` and `DATABASE_URL` environment variables
+- Shows clear error messages if MongoDB connection is not configured
+- See SETUP.md for complete MongoDB Atlas setup instructions
 
 ## Recent Cost Reduction Improvements (July 2025)
 

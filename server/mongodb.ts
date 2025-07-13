@@ -4,8 +4,14 @@ import jwt from 'jsonwebtoken';
 import { User, UserCreate, SavedBusiness, SavedList, ApiKeys } from '@shared/schema';
 
 // MongoDB connection string from environment variables
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://jacegalloway:1313@cluster0.77bcf.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
-const JWT_SECRET = 'business-search-token-secret-2025';
+const MONGODB_URI = process.env.MONGODB_URI || process.env.DATABASE_URL;
+const JWT_SECRET = process.env.JWT_SECRET || 'business-search-token-secret-2025';
+
+if (!MONGODB_URI) {
+  console.error('⚠️  MongoDB connection string not found!');
+  console.error('Please set MONGODB_URI or DATABASE_URL environment variable.');
+  console.error('Example: MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/database');
+}
 
 // Database and collection names
 const DB_NAME = 'businessSearchApp';
@@ -687,6 +693,29 @@ export async function getApiKeys(userId: string): Promise<ApiKeys | null> {
     ...apiKeys,
     _id: apiKeys._id!.toString()
   };
+}
+
+export async function getApiKeysStatus(userId: string): Promise<{hasGooglePlacesKey: boolean, hasOpenaiKey: boolean, updatedAt?: string}> {
+  try {
+    const userApiKeys = await getApiKeys(userId);
+    
+    // Check if API keys are available (either user-provided or server environment)
+    const hasGooglePlacesKey = !!(userApiKeys?.googlePlacesApiKey || process.env.GOOGLE_PLACES_API_KEY);
+    const hasOpenaiKey = !!(userApiKeys?.openaiApiKey || process.env.OPENAI_API_KEY);
+    
+    return {
+      hasGooglePlacesKey,
+      hasOpenaiKey,
+      updatedAt: userApiKeys?.updatedAt?.toISOString()
+    };
+  } catch (error) {
+    console.error("Error getting API keys status:", error);
+    // If there's an error, still check server environment variables
+    return {
+      hasGooglePlacesKey: !!process.env.GOOGLE_PLACES_API_KEY,
+      hasOpenaiKey: !!process.env.OPENAI_API_KEY
+    };
+  }
 }
 
 export async function deleteApiKeys(userId: string): Promise<boolean> {

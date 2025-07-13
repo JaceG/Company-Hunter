@@ -36,6 +36,7 @@ import {
   getBusinessesForList,
   saveApiKeys,
   getApiKeys,
+  getApiKeysStatus,
   deleteApiKeys
 } from './mongodb';
 import { authenticate, optionalAuth } from './middleware/auth';
@@ -291,21 +292,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // API Keys Management
   
-  // Get user's API keys
+  // Get user's API keys status
   app.get("/api/auth/api-keys", authenticate, async (req, res) => {
     try {
       const userId = req.user!.userId;
-      const apiKeys = await getApiKeys(userId);
-      
-      // Don't send actual keys, just indication if they exist
-      res.json({
-        hasGooglePlacesKey: !!(apiKeys?.googlePlacesApiKey),
-        hasOpenaiKey: !!(apiKeys?.openaiApiKey),
-        updatedAt: apiKeys?.updatedAt
-      });
+      const status = await getApiKeysStatus(userId);
+      res.json(status);
     } catch (error) {
-      console.error("Error fetching API keys:", error);
-      res.status(500).json({ message: "An error occurred while fetching API keys" });
+      console.error("Error fetching API keys status:", error);
+      res.status(500).json({ message: "An error occurred while fetching API keys status" });
     }
   });
 
