@@ -270,6 +270,14 @@ export default function AccountPortal() {
                   <Badge variant="destructive">Not Set</Badge>
                 )}
               </div>
+              <div className="flex items-center gap-2">
+                <span>MongoDB Atlas:</span>
+                {apiKeysStatus?.hasMongodbUri ? (
+                  <Badge variant="default">Configured</Badge>
+                ) : (
+                  <Badge variant="destructive">Not Set</Badge>
+                )}
+              </div>
             </div>
           </div>
         </CardContent>
