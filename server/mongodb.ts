@@ -173,7 +173,7 @@ export async function getSavedBusinesses(userId: string, page: number = 1, limit
   // Find all businesses for this user with pagination
   const businesses = await businessCollection
     .find({ userId })
-    .sort({ createdAt: -1 })
+    .sort({ name: 1 })
     .skip(skip)
     .limit(limit)
     .toArray();
