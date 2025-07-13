@@ -81,8 +81,6 @@ export type SavedList = z.infer<typeof savedListSchema> & {
 export const searchParamsSchema = z.object({
   businessType: z.string().min(1, "Business type is required"),
   location: z.string().min(1, "Location is required"),
-  radius: z.string().or(z.number()),
-  maxResults: z.string().or(z.number()),
 });
 
 export type SearchParams = z.infer<typeof searchParamsSchema>;

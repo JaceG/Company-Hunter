@@ -13,8 +13,6 @@ export interface Business {
 export interface SearchParams {
   businessType: string;
   location: string;
-  radius: string;
-  maxResults: string;
 }
 
 export interface SearchResult {

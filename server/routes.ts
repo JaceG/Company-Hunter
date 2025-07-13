@@ -872,13 +872,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/businesses/search", optionalAuth, async (req, res) => {
     try {
       const searchParams = searchParamsSchema.parse(req.body);
-      const { businessType, location, radius, maxResults } = searchParams;
+      const { businessType, location } = searchParams;
+      
+      // Use fixed values for radius and maxResults since they're not user-configurable
+      const radius = "20"; // 20 miles default radius
+      const maxResults = "100"; // 100 results default
       
       // Generate search fingerprint for caching
       const searchFingerprint = generateSearchFingerprint({
         businessType,
         location,
-        radius,
+        radius: Number(radius),
         maxResults: Number(maxResults)
       });
       
@@ -1216,7 +1220,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           searchParams: {
             businessType,
             location,
-            radius,
+            radius: Number(radius),
             maxResults: Number(maxResults)
           },
           businesses: newBusinesses.map(b => ({

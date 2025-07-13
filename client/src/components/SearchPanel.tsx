@@ -33,9 +33,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useState<SearchParams>({
     businessType: "",
-    location: "Columbus, OH",
-    radius: "20",
-    maxResults: "100"
+    location: "Columbus, OH"
   });
   
   const [stateParams, setStateParams] = useState<StateSearchParams>({
@@ -370,20 +368,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
                   </Select>
                 </div>
                 
-                <div className="space-y-2">
-                  <Label htmlFor="maxResults">Max Results</Label>
-                  <Select value={searchParams.maxResults} onValueChange={(value) => handleSelectChange(value, 'maxResults')}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="20">20 results</SelectItem>
-                      <SelectItem value="50">50 results</SelectItem>
-                      <SelectItem value="100">100 results</SelectItem>
-                      <SelectItem value="200">200 results</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+
               </div>
               
               <Button type="submit" disabled={isLoading || !apiKeysStatus?.hasGooglePlacesKey} className="w-full">
