@@ -65,52 +65,57 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
     onSearch(finalSearchParams);
   };
 
-  const handleEnhancedSearch = async () => {
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [availableCities, setAvailableCities] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  const handleGetSuggestions = async () => {
     if (!searchParams.businessType.trim()) {
       toast({
         title: "Job role is required",
-        description: "Please enter your job role for the AI-powered company search",
+        description: "Please enter your job role to get search suggestions",
         variant: "destructive"
       });
       return;
     }
 
     try {
-      // Call the enhanced search endpoint
-      const response = await fetch('/api/businesses/ai-search', {
+      setLoadingSuggestions(true);
+      const response = await fetch('/api/businesses/suggestions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          businessType: searchParams.businessType, // This now represents the job role
-          location: "Ohio, USA",
-          radius: "0",
-          maxResults: "500" // Higher limit for enhanced search
+          businessType: searchParams.businessType
         }),
       });
-
-      const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.message || 'Enhanced search failed');
+        throw new Error('Failed to get suggestions');
       }
       
+      const data = await response.json();
+      
+      setSuggestions(data.suggestions || []);
+      setAvailableCities(data.availableCities || []);
+      setShowSuggestions(true);
+      
       toast({
-        title: "AI Job Search Complete!",
-        description: `Found ${data.total} companies that hire "${searchParams.businessType}" using ${data.searchTermsUsed} smart search terms across ${data.citiesSearched} Ohio cities`,
+        title: "Search Suggestions Generated",
+        description: `Found ${data.suggestions?.length || 0} search term suggestions for ${searchParams.businessType}`,
+        duration: 5000
       });
-
-      // Trigger a refresh of the results by fetching all businesses
-      window.location.reload(); // Force a complete refresh to show the new results
       
     } catch (error) {
-      console.error("Enhanced search error:", error);
       toast({
-        title: "Search Error",
-        description: error instanceof Error ? error.message : "Failed to perform enhanced search. Please try again.",
+        title: "Failed to Get Suggestions",
+        description: error instanceof Error ? error.message : "Failed to generate search suggestions",
         variant: "destructive"
       });
+    } finally {
+      setLoadingSuggestions(false);
     }
   };
 
@@ -230,26 +235,85 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
               <Button 
                 type="button"
                 variant="outline"
-                className="w-full border-green-500 text-green-700 hover:bg-green-50" 
-                disabled={isLoading || !searchParams.businessType.trim()}
-                onClick={() => handleEnhancedSearch()}
+                className="w-full border-purple-500 text-purple-700 hover:bg-purple-50" 
+                disabled={isLoading || !searchParams.businessType.trim() || loadingSuggestions}
+                onClick={() => handleGetSuggestions()}
               >
                 <div className="flex items-center">
                   <svg className="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
                   </svg>
-                  AI Job Search - All Ohio Companies
+                  {loadingSuggestions ? "Getting Suggestions..." : "💡 Get Smart Search Suggestions"}
                 </div>
               </Button>
               
               <p className="text-xs text-gray-500 text-center">
-                AI finds companies that would hire your role across all Ohio cities using smart business type variations
+                Get AI-powered search suggestions instead of automatic comprehensive searches
               </p>
             </div>
           </form>
         </CardContent>
       </Card>
-      {/* API Configuration and images have been removed as requested */}
+      
+      {/* Search Suggestions Display */}
+      {showSuggestions && (
+        <Card>
+          <CardContent className="p-6">
+            <h3 className="text-lg font-semibold mb-4 text-[#0c0a09]">
+              💡 Search Suggestions for "{searchParams.businessType}"
+            </h3>
+            
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-medium text-sm mb-2 text-[#0c0a09]">Suggested Search Terms:</h4>
+                <div className="flex flex-wrap gap-2">
+                  {suggestions.map((suggestion, index) => (
+                    <Button
+                      key={index}
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => {
+                        setSearchParams(prev => ({ ...prev, businessType: suggestion }));
+                        setShowSuggestions(false);
+                      }}
+                    >
+                      {suggestion}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              
+              <div>
+                <h4 className="font-medium text-sm mb-2 text-[#0c0a09]">Available Cities ({availableCities.length} locations):</h4>
+                <p className="text-xs text-gray-600">
+                  {availableCities.slice(0, 10).join(", ")}
+                  {availableCities.length > 10 && ` and ${availableCities.length - 10} more...`}
+                </p>
+              </div>
+              
+              <div className="bg-blue-50 p-3 rounded-lg">
+                <h4 className="font-medium text-sm mb-1 text-blue-800">Cost-Effective Searching:</h4>
+                <ul className="text-xs text-blue-700 space-y-1">
+                  <li>• Use individual search terms instead of comprehensive searches</li>
+                  <li>• Each search costs ~$0.049 per location (Text Search + Details)</li>
+                  <li>• Caching prevents repeated API calls for same businesses</li>
+                  <li>• Focus on specific cities to control costs</li>
+                </ul>
+              </div>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSuggestions(false)}
+                className="w-full"
+              >
+                Close Suggestions
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

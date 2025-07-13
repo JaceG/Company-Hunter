@@ -105,6 +105,19 @@ The application is configured to run on Replit with:
 4. Set up OpenAI API key for AI-powered job search features
 5. Start the application with `npm run dev`
 
+## Recent Cost Reduction Improvements (July 2025)
+
+**Problem**: Application was generating $200+ Google API charges from automatic AI-enhanced searches.
+
+**Solution Implemented**:
+- **Suggestion System**: Replaced automatic 720-search AI feature with cost-effective suggestion box
+- **API Caching**: Added comprehensive caching for geocoding and business details to prevent repeated calls
+- **Field Optimization**: Removed unnecessary fields from Details API calls (kept name, website, formatted_address)
+- **Expanded Coverage**: Increased from 40 to 60-80 Ohio cities for more comprehensive manual searches
+- **Cost Transparency**: Added cost estimates and guidance in the UI
+
+**Estimated Cost Reduction**: From $200+ per AI search to ~$0.049 per manual search location.
+
 ## Development Workflow
 
 1. Backend API endpoint changes should be made in `server/routes.ts`

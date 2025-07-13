@@ -121,6 +121,31 @@ async function getOhioCities(): Promise<string[]> {
   }
 }
 
+async function getExpandedOhioCities(): Promise<string[]> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+      messages: [
+        {
+          role: "system",
+          content: "You are a geography expert specializing in Ohio. Return only a JSON array of strings, no other text."
+        },
+        {
+          role: "user",
+          content: "Provide an expanded list of 60-80 Ohio cities for comprehensive business searches. Include all major cities, mid-size cities, suburbs, county seats, and regional business centers. Go beyond the typical top 40 to include places like Westerville, Beavercreek, Mentor, Strongsville, etc. Format as a JSON array of city names only (no state)."
+        }
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const result = JSON.parse(response.choices[0].message.content || '{"cities": []}');
+    return result.cities || ["Columbus", "Cleveland", "Cincinnati"]; // Fallback
+  } catch (error) {
+    console.error("Error generating expanded Ohio cities:", error);
+    return ["Columbus", "Cleveland", "Cincinnati", "Toledo", "Akron", "Dayton"]; // Fallback
+  }
+}
+
 // Helper functions for comparing businesses
 function normalizeDomain(url: string): string {
   try {
@@ -162,6 +187,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Helper function to convert miles to meters for Google Places API
   const milesToMeters = (miles: number) => Math.round(miles * 1609.34);
+
+  // API caching to reduce repeated calls
+  const geocodeCache = new Map<string, any>();
+  const businessDetailsCache = new Map<string, any>();
   
   // Authentication routes
   
@@ -717,35 +746,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Process each place result to get additional details and format the response
         for (const place of resultsToProcess) {
-          // Get additional details like website
-          const detailsResponse = await fetch(
-            `${GOOGLE_PLACES_API_URL}/details/json?place_id=${place.place_id}&fields=name,website,formatted_address,url&key=${API_KEY}`
-          );
-          
-          const detailsData = await detailsResponse.json();
-          
-          if (detailsData.status === "OK") {
-            const details = detailsData.result;
-            
-            // Calculate distance (for demo purposes, using a formula based on lat/lng)
-            // In a real app, we could use the Google Distance Matrix API
-            const distance = calculateDistance(
-              lat, lng, 
-              place.geometry.location.lat, 
-              place.geometry.location.lng
+          // Check cache first to avoid repeated API calls
+          let details;
+          if (businessDetailsCache.has(place.place_id)) {
+            details = businessDetailsCache.get(place.place_id);
+          } else {
+            // Get additional details like website (keeping formatted_address since user needs it)
+            const detailsResponse = await fetch(
+              `${GOOGLE_PLACES_API_URL}/details/json?place_id=${place.place_id}&fields=name,website,formatted_address&key=${API_KEY}`
             );
             
-            businesses.push({
-              name: details.name || place.name,
-              website: details.website || "",
-              location: details.formatted_address || place.vicinity || "",
-              distance: `${distance.toFixed(1)} mi`,
-              isBadLead: false,
-              notes: "",
-              isDuplicate: false,
-              careerLink: details.website ? `${details.website.replace(/\/+$/, '')}/careers` : ""
-            });
+            const detailsData = await detailsResponse.json();
+            
+            if (detailsData.status === "OK") {
+              details = detailsData.result;
+              // Cache the result to avoid repeated calls
+              businessDetailsCache.set(place.place_id, details);
+            } else {
+              continue; // Skip this place if details fail
+            }
           }
+            
+          // Calculate distance (for demo purposes, using a formula based on lat/lng)
+          // In a real app, we could use the Google Distance Matrix API
+          const distance = calculateDistance(
+            lat, lng, 
+            place.geometry.location.lat, 
+            place.geometry.location.lng
+          );
+          
+          businesses.push({
+            name: details.name || place.name,
+            website: details.website || "",
+            location: details.formatted_address || place.vicinity || "",
+            distance: `${distance.toFixed(1)} mi`,
+            isBadLead: false,
+            notes: "",
+            isDuplicate: false,
+            careerLink: details.website ? `${details.website.replace(/\/+$/, '')}/careers` : ""
+          });
         }
         
         console.log(`Fetched ${businesses.length}/${maxResultsNum} businesses so far, next page token: ${nextPageToken ? 'available' : 'none'}`);
@@ -1050,7 +1089,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Geocode address to get coordinates using Google Maps API
+  // Geocode address to get coordinates using Google Maps API with caching
   app.get("/api/geocode", async (req, res) => {
     try {
       const { address } = req.query;
@@ -1065,6 +1104,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      const addressKey = (address as string).toLowerCase();
+      
+      // Check cache first to avoid repeated geocoding calls
+      if (geocodeCache.has(addressKey)) {
+        const cachedResult = geocodeCache.get(addressKey);
+        return res.json(cachedResult);
+      }
+
       const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address as string)}&key=${API_KEY}`;
       
       const response = await fetch(geocodeUrl);
@@ -1072,13 +1119,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (data.status === 'OK' && data.results.length > 0) {
         const location = data.results[0].geometry.location;
-        res.json({
+        const result = {
           coordinates: {
             lat: location.lat,
             lng: location.lng
           },
           formatted_address: data.results[0].formatted_address
-        });
+        };
+        
+        // Cache the result to avoid repeated API calls
+        geocodeCache.set(addressKey, result);
+        
+        res.json(result);
       } else {
         res.status(404).json({ message: "Address not found" });
       }
