@@ -42,7 +42,11 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
             .replace(/\/+$/, '');
         };
         
-        if (normalizeUrl(business.website) === normalizeUrl(savedBusiness.website)) {
+        const businessDomain = normalizeUrl(business.website);
+        const savedDomain = normalizeUrl(savedBusiness.website);
+        
+        if (businessDomain === savedDomain) {
+          console.log(`Duplicate found by website: ${business.name} (${businessDomain}) matches ${savedBusiness.name} (${savedDomain})`);
           return true;
         }
       }
@@ -55,13 +59,24 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
             .trim();
         };
         
-        if (normalizeName(business.name) === normalizeName(savedBusiness.name)) {
+        const businessName = normalizeName(business.name);
+        const savedName = normalizeName(savedBusiness.name);
+        
+        if (businessName === savedName) {
+          console.log(`Duplicate found by name: ${business.name} (${businessName}) matches ${savedBusiness.name} (${savedName})`);
           return true;
         }
       }
       
       return false;
     }) || false;
+    
+    if (business.name === "FYVE Marketing") {
+      console.log(`FYVE Marketing duplicate check result: ${isDuplicate}`, {
+        searchBusiness: business,
+        savedBusinessesCount: savedBusinessesData?.businesses?.length || 0
+      });
+    }
     
     return { ...business, isDuplicate };
   });
