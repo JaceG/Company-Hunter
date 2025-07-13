@@ -11,12 +11,19 @@ export interface SavedBusiness extends Omit<Business, 'id'> {
   updatedAt?: Date;
 }
 
-// Get all saved businesses for the current user with pagination
-export function useSavedBusinesses(page: number = 1, limit: number = 50) {
+// Get all saved businesses for the current user with pagination and search
+export function useSavedBusinesses(page: number = 1, limit: number = 50, searchTerm?: string) {
   return useQuery({
-    queryKey: ["/api/my/businesses", page, limit],
+    queryKey: ["/api/my/businesses", page, limit, searchTerm],
     queryFn: async () => {
-      return await apiRequest("GET", `/api/my/businesses?page=${page}&limit=${limit}`);
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString()
+      });
+      if (searchTerm && searchTerm.trim()) {
+        params.append('search', searchTerm.trim());
+      }
+      return await apiRequest("GET", `/api/my/businesses?${params}`);
     },
   });
 }

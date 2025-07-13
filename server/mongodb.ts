@@ -158,21 +158,32 @@ export async function saveBusiness(business: SavedBusiness): Promise<SavedBusine
   return { ...businessWithTimestamps, _id: result.insertedId.toString() };
 }
 
-export async function getSavedBusinesses(userId: string, page: number = 1, limit: number = 50): Promise<{businesses: SavedBusiness[], total: number, page: number, totalPages: number}> {
+export async function getSavedBusinesses(userId: string, page: number = 1, limit: number = 50, searchTerm?: string): Promise<{businesses: SavedBusiness[], total: number, page: number, totalPages: number}> {
   const database = await connectToMongoDB();
   const businessCollection = database.collection<SavedBusiness>(COLLECTIONS.SAVED_BUSINESSES);
 
   const skip = (page - 1) * limit;
   
-  // Get total count for pagination
-  const total = await businessCollection.countDocuments({ userId });
+  // Build search filter
+  let filter: any = { userId };
+  if (searchTerm && searchTerm.trim()) {
+    const searchRegex = new RegExp(searchTerm.trim(), 'i');
+    filter.$or = [
+      { name: { $regex: searchRegex } },
+      { website: { $regex: searchRegex } },
+      { location: { $regex: searchRegex } }
+    ];
+  }
+  
+  // Get total count for pagination with search filter
+  const total = await businessCollection.countDocuments(filter);
   const totalPages = Math.ceil(total / limit);
   
   console.log(`getSavedBusinesses: userId=${userId}, page=${page}, limit=${limit}, total=${total}, skip=${skip}`);
   
-  // Find all businesses for this user with pagination
+  // Find all businesses for this user with pagination and search
   const businesses = await businessCollection
-    .find({ userId })
+    .find(filter)
     .sort({ name: 1 })
     .skip(skip)
     .limit(limit)

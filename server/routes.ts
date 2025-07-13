@@ -395,8 +395,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user!.userId;
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
+      const searchTerm = req.query.search as string;
       
-      const result = await getSavedBusinesses(userId, page, limit);
+      const result = await getSavedBusinesses(userId, page, limit, searchTerm);
       res.json(result);
     } catch (error) {
       console.error("Error fetching saved businesses:", error);

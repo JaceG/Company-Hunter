@@ -22,7 +22,13 @@ export default function AccountPortal() {
   const { user, isLoading: isAuthLoading, isAuthenticated } = useAuth();
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(50);
-  const { data: savedBusinessesData, isLoading: isBusinessesLoading, error } = useSavedBusinesses(currentPage, pageSize);
+  const [searchTerm, setSearchTerm] = useState("");
+  
+  // Reset page when search term changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+  const { data: savedBusinessesData, isLoading: isBusinessesLoading, error } = useSavedBusinesses(currentPage, pageSize, searchTerm);
   const { data: apiKeysStatus } = useApiKeys();
   const updateBusinessMutation = useUpdateSavedBusiness();
   const deleteBusinessMutation = useDeleteSavedBusiness();
@@ -33,8 +39,6 @@ export default function AccountPortal() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const [searchTerm, setSearchTerm] = useState("");
   const [filterRecentOnly, setFilterRecentOnly] = useState(false);
   const [columbusCoords, setColumbusCoords] = useState<{lat: number, lng: number} | null>(null);
   const [businessCoords, setBusinessCoords] = useState<Map<string, {lat: number, lng: number}>>(new Map());
@@ -150,19 +154,12 @@ export default function AccountPortal() {
     return diffHours <= 24;
   };
   
-  // Filter and sort businesses
+  // Apply client-side filtering only for "recent only" since search is now server-side
   const filteredBusinesses = savedBusinesses ? savedBusinesses
     .filter(business => {
-      // Apply text search filter
-      const searchMatch = searchTerm === "" || 
-        business.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (business.website && business.website.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (business.location && business.location.toLowerCase().includes(searchTerm.toLowerCase()));
-      
-      // Apply recent only filter
+      // Apply recent only filter (search is now handled server-side)
       const recentMatch = !filterRecentOnly || isRecentlyAdded(business);
-      
-      return searchMatch && recentMatch;
+      return recentMatch;
     })
     .sort((a, b) => {
       // Apply sorting
