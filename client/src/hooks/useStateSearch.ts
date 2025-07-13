@@ -19,12 +19,14 @@ interface StateSearchResult {
 interface StateCitiesParams {
   state: string;
   maxCities?: number;
+  sortBy?: "size" | "alphabetical";
 }
 
 interface StateCitiesResult {
   cities: string[];
   state: string;
   count: number;
+  sortBy: "size" | "alphabetical";
   estimatedCost: {
     perCity: string;
     total: string;

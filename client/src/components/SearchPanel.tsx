@@ -53,6 +53,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
   const [showCities, setShowCities] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [loadingCities, setLoadingCities] = useState(false);
+  const [sortBy, setSortBy] = useState<"size" | "alphabetical">("size");
   
   const { data: apiKeysStatus } = useApiKeys();
   const stateSearch = useStateSearch();
@@ -222,13 +223,13 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 
     try {
       setLoadingCities(true);
-      const result = await stateCities.mutateAsync({ state, maxCities: 100 });
+      const result = await stateCities.mutateAsync({ state, maxCities: 500, sortBy: sortBy });
       setAvailableCities(result.cities || []);
       setSelectedCities([]);
       setShowCities(true);
       toast({
         title: "Cities loaded",
-        description: `Found ${result.count} cities in ${state}. Select up to 5 cities to search.`,
+        description: `Found ${result.count} cities in ${state}, sorted by ${sortBy === "size" ? "population size" : "alphabetical order"}. Select up to 5 cities to search.`,
       });
     } catch (error) {
       console.error("Error getting cities:", error);
@@ -456,7 +457,43 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
               
 
 
-              <div className="space-y-2">
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label>City Sorting</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant={sortBy === "size" ? "default" : "outline"}
+                      onClick={() => {
+                        setSortBy("size");
+                        if (availableCities.length > 0) {
+                          getCitiesForState(stateParams.state);
+                        }
+                      }}
+                      className="flex-1"
+                      size="sm"
+                      disabled={loadingCities}
+                    >
+                      By Size
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={sortBy === "alphabetical" ? "default" : "outline"}
+                      onClick={() => {
+                        setSortBy("alphabetical");
+                        if (availableCities.length > 0) {
+                          getCitiesForState(stateParams.state);
+                        }
+                      }}
+                      className="flex-1"
+                      size="sm"
+                      disabled={loadingCities}
+                    >
+                      A-Z
+                    </Button>
+                  </div>
+                </div>
+                
                 <Button 
                   variant="outline"
                   onClick={() => getCitiesForState(stateParams.state)}
@@ -464,7 +501,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
                   className="w-full"
                 >
                   <Sparkles className="w-4 h-4 mr-2" />
-                  {loadingCities ? "Loading..." : `Get AI City Suggestions for ${stateParams.state}`}
+                  {loadingCities ? "Loading..." : `Get 500 Cities (${sortBy === "size" ? "By Size" : "A-Z"}) for ${stateParams.state}`}
                 </Button>
               </div>
 
@@ -477,16 +514,16 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
                     </span>
                   </div>
                   <div className="max-h-64 overflow-y-auto border rounded-md p-3 space-y-2">
-                    {availableCities.map((city) => (
-                      <div key={city} className="flex items-center space-x-2">
+                    {availableCities.map((city, index) => (
+                      <div key={`${city}-${index}`} className="flex items-center space-x-2">
                         <Checkbox
-                          id={`city-${city}`}
+                          id={`city-${city}-${index}`}
                           checked={selectedCities.includes(city)}
                           onCheckedChange={() => handleCityToggle(city)}
                           disabled={!selectedCities.includes(city) && selectedCities.length >= 5}
                         />
                         <Label 
-                          htmlFor={`city-${city}`} 
+                          htmlFor={`city-${city}-${index}`} 
                           className={`text-sm cursor-pointer ${
                             !selectedCities.includes(city) && selectedCities.length >= 5 
                               ? 'text-muted-foreground' 

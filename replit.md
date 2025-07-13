@@ -162,14 +162,17 @@ The application is configured to run on Replit with:
 5. Performs normal search with AI-enhanced terms
 
 ### Enhanced City Selection ✅
-**Updated**: Expanded city selection from 5 to 100 cities per state while maintaining performance optimization.
+**Updated**: Expanded city selection from 100 to 500 cities per state with dual sorting options.
 
 **Features**:
-- **100 Cities Available**: Users now see top 100 cities per state for selection
+- **500 Cities Available**: Users now see top 500 cities per state for selection
+- **Dual Sorting Options**: Toggle between "By Size" (population-based) and "A-Z" (alphabetical) sorting
+- **Size-Based Default**: Cities initially sorted by population size from largest to smallest
+- **Alphabetical Toggle**: Instant re-sorting to alphabetical order when requested
 - **5-City Search Limit**: Maintains optimal performance by limiting actual searches to 5 cities
-- **Enhanced AI Prompts**: Improved OpenAI prompts to include suburbs and business-active towns
-- **Better Coverage**: Expanded fallback city lists with 20+ cities per state
-- **Improved UI**: Increased display height for city selection interface
+- **Enhanced AI Prompts**: Improved OpenAI prompts to include comprehensive city coverage
+- **Better Coverage**: Expanded fallback city lists with comprehensive coverage per state
+- **Improved UI**: Sorting toggle buttons and increased display height for city selection
 
 ### API Optimization Updates
 

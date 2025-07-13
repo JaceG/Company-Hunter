@@ -135,7 +135,7 @@ async function getOhioCities(): Promise<string[]> {
 const stateCitiesCache = new Map<string, { cities: string[], timestamp: number }>();
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
-async function getTopCitiesForState(state: string, maxCities: number = 100): Promise<string[]> {
+async function getTopCitiesForState(state: string, maxCities: number = 500): Promise<string[]> {
   // Check cache first (24-hour cache to reduce OpenAI API calls)
   const cacheKey = `${state}-${maxCities}`;
   const cached = stateCitiesCache.get(cacheKey);
@@ -145,24 +145,27 @@ async function getTopCitiesForState(state: string, maxCities: number = 100): Pro
   }
   
   try {
-    // Generate cities dynamically using OpenAI - now supports up to 100 cities
+    // Generate cities dynamically using OpenAI - now supports up to 500 cities
     const response = await openai.chat.completions.create({
       model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
       messages: [
         {
           role: "system",
-          content: "You are a geography expert. Return only a JSON object with a 'cities' array containing city names as strings, no other text."
+          content: "You are a comprehensive geography expert with extensive knowledge of US cities. Return only a JSON object with a 'cities' array containing city names as strings, ordered by population size from largest to smallest."
         },
         {
           role: "user",
-          content: `Provide the top ${maxCities} cities and towns in ${state} by population and business activity. Include major cities, business centers, metropolitan areas, suburbs, and smaller business-active towns. Return JSON in this exact format: {"cities": ["City1", "City2", "City3"]} with exactly ${maxCities} cities.`
+          content: `Provide exactly ${maxCities} cities and towns in ${state}, ordered by population size from largest to smallest. Include major metropolitan areas, cities, suburbs, towns, townships, villages, and smaller communities with business activity. Start with the largest cities and work down to smaller towns. Ensure each entry is just the city name without state abbreviation. Return JSON in this exact format: {"cities": ["City1", "City2", "City3"]} with exactly ${maxCities} cities ordered by population from largest to smallest.`
         }
       ],
       response_format: { type: "json_object" },
     });
 
     const result = JSON.parse(response.choices[0].message.content || '{"cities": []}');
-    const cities = result.cities && Array.isArray(result.cities) ? result.cities.slice(0, maxCities) : [];
+    let cities = result.cities && Array.isArray(result.cities) ? result.cities : [];
+    
+    // Remove duplicates and trim whitespace
+    cities = [...new Set(cities.map(city => city.trim()).filter(city => city.length > 0))].slice(0, maxCities);
     
     // Cache the result
     stateCitiesCache.set(cacheKey, {
@@ -175,15 +178,15 @@ async function getTopCitiesForState(state: string, maxCities: number = 100): Pro
   } catch (error) {
     console.error(`Error generating cities for ${state}:`, error);
     
-    // Expanded fallback cities for better coverage
+    // Comprehensive fallback cities ordered by population size for better coverage
     const fallbackCities: Record<string, string[]> = {
-      "California": ["Los Angeles", "San Diego", "San Jose", "San Francisco", "Sacramento", "Long Beach", "Oakland", "Bakersfield", "Fresno", "Santa Ana", "Anaheim", "Stockton", "Riverside", "Chula Vista", "Irvine", "Fremont", "San Bernardino", "Modesto", "Fontana", "Oxnard"],
-      "Texas": ["Houston", "San Antonio", "Dallas", "Austin", "Fort Worth", "El Paso", "Arlington", "Corpus Christi", "Plano", "Lubbock", "Laredo", "Irving", "Garland", "Frisco", "McKinney", "Grand Prairie", "Amarillo", "Brownsville", "Pasadena", "Mesquite"],
-      "Florida": ["Jacksonville", "Miami", "Tampa", "Orlando", "St. Petersburg", "Hialeah", "Tallahassee", "Fort Lauderdale", "Port St. Lucie", "Cape Coral", "Pembroke Pines", "Hollywood", "Miramar", "Gainesville", "Coral Springs", "Miami Gardens", "Clearwater", "Palm Bay", "West Palm Beach", "Pompano Beach"],
-      "New York": ["New York City", "Buffalo", "Rochester", "Syracuse", "Albany", "Yonkers", "New Rochelle", "Mount Vernon", "Schenectady", "Utica", "White Plains", "Troy", "Niagara Falls", "Binghamton", "Freeport", "Valley Stream", "Long Beach", "Rome", "Watertown", "Ithaca"],
-      "Pennsylvania": ["Philadelphia", "Pittsburgh", "Allentown", "Erie", "Reading", "Scranton", "Bethlehem", "Lancaster", "Harrisburg", "Altoona", "York", "State College", "Wilkes-Barre", "Chester", "Norristown", "Camden", "Williamsport", "Johnstown", "Easton", "McKeesport"],
-      "Illinois": ["Chicago", "Aurora", "Rockford", "Joliet", "Naperville", "Springfield", "Peoria", "Elgin", "Waukegan", "Cicero", "Champaign", "Bloomington", "Arlington Heights", "Evanston", "Decatur", "Schaumburg", "Bolingbrook", "Palatine", "Skokie", "Des Plaines"],
-      "Ohio": ["Columbus", "Cleveland", "Cincinnati", "Toledo", "Akron", "Dayton", "Parma", "Canton", "Youngstown", "Lorain", "Hamilton", "Springfield", "Kettering", "Elyria", "Lakewood", "Cuyahoga Falls", "Middletown", "Euclid", "Newark", "Mansfield"]
+      "California": ["Los Angeles", "San Diego", "San Jose", "San Francisco", "Fresno", "Sacramento", "Long Beach", "Oakland", "Bakersfield", "Anaheim", "Santa Ana", "Riverside", "Stockton", "Irvine", "Chula Vista", "Fremont", "San Bernardino", "Modesto", "Fontana", "Oxnard", "Moreno Valley", "Huntington Beach", "Glendale", "Santa Clarita", "Garden Grove", "Oceanside", "Rancho Cucamonga", "Santa Rosa", "Ontario", "Lancaster", "Elk Grove", "Corona", "Palmdale", "Salinas", "Pomona", "Hayward", "Escondido", "Sunnyvale", "Torrance", "Orange", "Fullerton", "Pasadena", "Thousand Oaks", "Visalia", "Simi Valley", "Concord", "Roseville", "Vallejo", "Victorville", "Santa Clara", "Berkeley", "El Monte", "Downey", "Costa Mesa", "Inglewood", "Ventura", "West Covina", "Norwalk", "Carlsbad", "Fairfield", "Richmond", "Murrieta", "Burbank", "Antioch", "Daly City", "Temecula", "Santa Maria", "El Cajon", "San Mateo", "Rialto", "Clovis", "Compton", "Jurupa Valley", "Vista", "South Gate", "Mission Viejo", "Vacaville", "Carson", "Hesperia", "Santa Monica", "Westminster", "Redding", "Santa Barbara", "Chico", "Newport Beach", "San Leandro", "San Marcos", "Whittier", "Hawthorne", "Citrus Heights", "Tracy", "Alhambra", "Livermore", "Buena Park", "Lakewood", "Merced", "Hemet", "Chino", "Menifee", "Lake Forest", "Napa", "Redwood City", "Bellflower", "Indio", "Tustin", "Baldwin Park", "Chino Hills", "Mountain View", "Alameda", "Upland", "San Ramon", "Folsom", "Pleasanton", "Union City", "Perris", "Manteca", "Lynwood", "Apple Valley", "San Rafael", "Redlands", "Turlock", "Milpitas", "Redondo Beach", "Rancho Cordova", "Yorba Linda", "Palo Alto", "Davis", "Camarillo", "Walnut Creek", "Pittsburg", "South San Francisco", "Yuba City", "San Clemente", "Laguna Niguel", "Pico Rivera", "Montebello", "Lodi", "Madera", "Santa Cruz", "La Habra", "Encinitas", "Monterey Park", "Tulare", "Cupertino", "Gardena", "National City", "Rocklin", "Petaluma", "Huntington Park", "San Bruno", "Brentwood", "Paramount", "La Mesa", "El Centro", "Watsonville", "Santee", "Saratoga", "Campbell", "Novato", "Hanford", "Delano", "Porterville", "Yucaipa", "Pacifica", "Martinez", "San Pablo", "Holtville", "Lompoc", "El Segundo", "Gilroy", "Diamond Bar", "Brea", "Morgan Hill", "San Dimas", "Azusa", "Duarte", "Cerritos", "Milbrae", "San Carlos", "Arcadia", "La Puente", "Foster City", "Atascadero", "Glendora", "Monrovia", "Los Altos", "Manhattan Beach", "Hermosa Beach", "King City", "Seal Beach", "Placerville", "Paso Robles", "Hollister", "San Juan Capistrano", "Colton", "Grover Beach", "La Verne", "San Jacinto", "Benicia", "Ceres", "Soledad", "Cathedral City", "La Quinta", "Half Moon Bay", "Marina", "Barstow", "San Luis Obispo", "Los Banos", "Selma", "Coalinga", "Ridgecrest", "Tehachapi", "Banning", "Paradise", "Grass Valley", "Rosemead", "Eastvale", "Moraga", "La Mirada", "Villa Park", "Danville", "Brawley", "Rolling Hills Estates", "Nevada City", "Lemon Grove", "Hawaiian Gardens", "Canyon Lake", "Larkspur", "Belmont", "San Anselmo", "Corte Madera", "Mill Valley", "Tiburon", "Sausalito", "Orinda", "Lafayette", "Alamo", "Blackhawk", "Los Altos Hills", "Atherton", "Portola Valley", "Woodside", "Hillsborough", "Burlingame", "Brisbane", "Colma", "Broadmoor"],
+      "Texas": ["Houston", "San Antonio", "Dallas", "Austin", "Fort Worth", "El Paso", "Arlington", "Corpus Christi", "Plano", "Lubbock", "Laredo", "Irving", "Garland", "Frisco", "McKinney", "Grand Prairie", "Amarillo", "Brownsville", "Pasadena", "Mesquite", "Killeen", "McAllen", "Carrollton", "Midland", "Waco", "Denton", "Abilene", "Beaumont", "Round Rock", "Odessa", "Wichita Falls", "Richardson", "Lewisville", "Tyler", "College Station", "Pearland", "San Angelo", "Allen", "League City", "Sugar Land", "Longview", "Baytown", "Missouri City", "Temple", "Edinburg", "Georgetown", "Pflugerville", "New Braunfels", "The Woodlands", "Cedar Park", "North Richland Hills", "Mansfield", "Rowlett", "Galveston", "Beaumont", "Port Arthur", "Texas City", "Huntsville", "Conroe", "Sherman", "Harlingen", "Victoria", "Bryan", "Pharr", "Mission", "Euless", "Grapevine", "Bedford", "Hurst", "Keller", "Coppell", "Flower Mound", "Duncanville", "DeSoto", "Lancaster", "Cedar Hill", "Wylie", "Rockwall", "Sachse", "Murphy", "Prosper", "Little Elm", "The Colony", "Farmers Branch", "Addison", "University Park", "Highland Park", "Balch Springs", "Seagoville", "Sunnyvale", "Hutchins", "Wilmer", "Glenn Heights", "Ovilla", "Red Oak", "Waxahachie", "Midlothian", "Ennis", "Corsicana", "Athens", "Palestine", "Jacksonville", "Marshall", "Texarkana", "Lufkin", "Nacogdoches", "Huntsville", "Conroe", "Magnolia", "Montgomery", "Willis", "Splendora", "Cleveland", "Liberty", "Dayton", "Crosby", "Humble", "Kingwood", "Atascocita", "Spring", "Tomball", "Cypress", "Katy", "Cinco Ranch", "Fulshear", "Richmond", "Rosenberg", "Stafford", "Bellaire", "West University Place", "Southside Place", "Hunters Creek Village", "Bunker Hill Village", "Piney Point Village", "Hedwig Village", "Spring Valley", "Jersey Village", "Jacinto City", "Galena Park", "South Houston", "Deer Park", "La Porte", "Seabrook", "Kemah", "Webster", "Nassau Bay", "El Lago", "Taylor Lake Village", "Clear Lake Shores", "Shoreacres", "Morgan's Point", "La Marque", "League City", "Friendswood", "Alvin", "Santa Fe", "Dickinson", "Hitchcock", "Bacliff", "San Leon", "Kemah", "Clear Lake City", "Brookside Village", "Hillcrest", "Pearland", "Manvel", "Iowa Colony", "Rosharon", "Angleton", "Lake Jackson", "Clute", "Freeport", "Quintana", "Surfside Beach", "Brazoria", "Sweeny", "West Columbia", "East Columbia", "Danbury", "Alvin", "Liverpool", "Chocolate Bayou", "Oyster Creek"],
+      "Florida": ["Jacksonville", "Miami", "Tampa", "Orlando", "St. Petersburg", "Hialeah", "Tallahassee", "Fort Lauderdale", "Port St. Lucie", "Cape Coral", "Pembroke Pines", "Hollywood", "Miramar", "Gainesville", "Coral Springs", "Miami Gardens", "Clearwater", "Palm Bay", "West Palm Beach", "Pompano Beach", "Lakeland", "Davie", "Miami Beach", "Sunrise", "Plantation", "Boca Raton", "Deltona", "Largo", "Deerfield Beach", "Boynton Beach", "Lauderhill", "Weston", "Kissimmee", "Homestead", "Delray Beach", "Tamarac", "Daytona Beach", "North Miami", "Wellington", "North Port", "Coconut Creek", "Margate", "Ocala", "Pensacola", "Sanford", "Bradenton", "Palm Beach Gardens", "Pinellas Park", "Sarasota", "Orlando", "Altamonte Springs", "Casselberry", "Winter Park", "Apopka", "Oviedo", "Winter Springs", "Maitland", "Winter Garden", "Windermere", "Oakland", "Clermont", "Minneola", "Groveland", "Mascotte", "Montverde", "Howey-in-the-Hills", "Astatula", "Mount Dora", "Tavares", "Eustis", "Leesburg", "Fruitland Park", "Lady Lake", "The Villages", "Summerfield", "Belleview", "Ocala", "Silver Springs", "Dunnellon", "Crystal River", "Homosassa", "Inverness", "Lecanto", "Beverly Hills", "Citrus Springs", "Hernando", "Brooksville", "Spring Hill", "Weeki Wachee", "Masaryktown", "San Antonio", "Dade City", "Zephyrhills", "Wesley Chapel", "Lutz", "Land O' Lakes", "Odessa", "Trinity", "New Port Richey", "Port Richey", "Hudson", "Bayonet Point", "Holiday", "Tarpon Springs", "Palm Harbor", "Dunedin", "Safety Harbor", "Oldsmar", "Westchase", "Town 'n' Country", "Carrollwood", "Temple Terrace", "Plant City", "Brandon", "Valrico", "Lithia", "Riverview", "Gibsonton", "Apollo Beach", "Ruskin", "Sun City Center", "Wimauma", "Balm", "Durant", "Dover", "Seffner", "Mango", "Thonotosassa", "Dover"],
+      "New York": ["New York City", "Buffalo", "Rochester", "Syracuse", "Albany", "Yonkers", "New Rochelle", "Mount Vernon", "Schenectady", "Utica", "White Plains", "Troy", "Niagara Falls", "Binghamton", "Freeport", "Valley Stream", "Long Beach", "Rome", "Watertown", "Ithaca", "Middletown", "Spring Valley", "Newburgh", "Poughkeepsie", "Jamestown", "Elmira", "Tonawanda", "Hempstead", "Levittown", "Hicksville", "Uniondale", "East Meadow", "Baldwin", "Massapequa", "Seaford", "Wantagh", "Bellmore", "Merrick", "Rockville Centre", "Lynbrook", "Malverne", "Glen Cove", "Oyster Bay", "Syosset", "Plainview", "Bethpage", "Farmingdale", "Amityville", "Copiague", "Lindenhurst", "Babylon", "West Babylon", "North Babylon", "Deer Park", "Brentwood", "Bay Shore", "Islip", "Central Islip", "Oakdale", "Bohemia", "Ronkonkoma", "Lake Ronkonkoma", "Holbrook", "Holtsville", "Farmingville", "Selden", "Centereach", "Middle Island", "Ridge", "Yaphank", "Medford", "Patchogue", "Bellport", "Brookhaven", "Shirley", "Mastic", "Moriches", "Eastport", "Speonk", "Remsenburg", "Westhampton", "East Quogue", "Hampton Bays", "Southampton", "Bridgehampton", "Sag Harbor", "East Hampton", "Amagansett", "Montauk", "Greenport", "Southold", "Mattituck", "Cutchogue", "Peconic", "Jamesport", "Aquebogue", "Baiting Hollow", "Calverton", "Manorville", "Eastport", "Center Moriches", "East Moriches", "Mastic Beach", "Shirley", "Mastic", "East Patchogue", "Medford"],
+      "Pennsylvania": ["Philadelphia", "Pittsburgh", "Allentown", "Erie", "Reading", "Scranton", "Bethlehem", "Lancaster", "Harrisburg", "Altoona", "York", "State College", "Wilkes-Barre", "Chester", "Norristown", "Camden", "Williamsport", "Johnstown", "Easton", "McKeesport", "Hazleton", "Lebanon", "New Castle", "Washington", "Butler", "Pottstown", "Chambersburg", "Greensburg", "Uniontown", "Oil City", "Franklin", "Meadville", "Titusville", "Corry", "Warren", "Bradford", "Du Bois", "Punxsutawney", "Indiana", "Latrobe", "Jeannette", "Mount Pleasant", "Scottdale", "Connellsville", "Brownsville", "California", "Charleroi", "Monessen", "Belle Vernon", "Donora", "Glassport", "Liberty", "Port Vue", "Elizabeth", "West Elizabeth", "Clairton", "Duquesne", "Homestead", "Munhall", "West Homestead", "Whitaker", "Rankin", "Braddock", "North Braddock", "East Pittsburgh", "Turtle Creek", "Wilmerding", "Wall", "East McKeesport", "Versailles", "White Oak", "North Versailles", "Jefferson Hills", "West Mifflin", "Pleasant Hills", "Baldwin", "Whitehall", "Bethel Park", "Upper St. Clair", "Peters Township", "South Fayette", "Robinson Township", "Moon Township", "Coraopolis", "Sewickley", "Edgeworth", "Leetsdale", "Bell Acres", "Haysville", "Bradford Woods", "Franklin Park", "Marshall Township", "Pine Township", "Richland Township", "McCandless", "Ross Township", "Shaler Township", "Millvale", "Etna", "Sharpsburg", "Aspinwall", "Blawnox", "Fox Chapel", "O'Hara Township", "Indiana Township", "Harmar Township", "Springdale", "Cheswick", "Tarentum", "Brackenridge", "Natrona Heights", "Harrison Township", "Freeport", "Sarver", "Saxonburg", "Butler Township", "Adams Township", "Cranberry Township", "Zelienople", "Harmony", "Evans City", "Callery", "Mars", "Wexford", "Gibsonia", "Allison Park", "Glenshaw", "Hampton Township", "Richland Township"],
+      "Illinois": ["Chicago", "Aurora", "Rockford", "Joliet", "Naperville", "Springfield", "Peoria", "Elgin", "Waukegan", "Cicero", "Champaign", "Bloomington", "Arlington Heights", "Evanston", "Decatur", "Schaumburg", "Bolingbrook", "Palatine", "Skokie", "Des Plaines", "Orland Park", "Tinley Park", "Oak Lawn", "Berwyn", "Mount Prospect", "Normal", "Wheaton", "Hoffman Estates", "Oak Park", "Downers Grove", "Elmhurst", "Glenview", "DeKalb", "Lombard", "Belleville", "Moline", "Buffalo Grove", "Bartlett", "Urbana", "Quincy", "Crystal Lake", "Streamwood", "Carol Stream", "Romeoville", "Rock Island", "Calumet City", "Carpentersville", "Wheeling", "Park Ridge", "Addison", "Woodridge"],
+      "Ohio": ["Columbus", "Cleveland", "Cincinnati", "Toledo", "Akron", "Dayton", "Parma", "Canton", "Youngstown", "Lorain", "Hamilton", "Springfield", "Kettering", "Elyria", "Lakewood", "Cuyahoga Falls", "Middletown", "Euclid", "Newark", "Mansfield", "Mentor", "Beavercreek", "Cleveland Heights", "Strongsville", "Dublin", "Fairfield", "Findlay", "Warren", "Lancaster", "Lima", "Huber Heights", "Westerville", "Marion", "Grove City", "Stow", "Delaware", "Brunswick", "Upper Arlington", "Reynoldsburg", "Westlake", "Northbrook", "Gahanna", "Hilliard", "Pickerington", "Mason", "Twinsburg", "Miamisburg", "Whitehall", "New Albany", "Powell", "Worthington", "Grandview Heights", "Bexley", "Minerva Park", "Riverlea", "Marble Cliff", "Valleyview", "Urbancrest", "Lockbourne", "Commercial Point", "Ashville", "South Bloomfield", "Orient", "Mount Sterling", "London", "West Jefferson", "Plain City", "Marysville", "Uniontown", "Richwood", "Magnetic Springs", "Prospect", "Waldo", "Cardington", "Ashley", "Sunbury", "Galena", "Lewis Center", "Shawnee Hills", "Worthington Hills", "Riverlea"]
     };
     
     return fallbackCities[state]?.slice(0, maxCities) || [];
@@ -1299,7 +1302,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get available cities for a specific state
   app.post("/api/businesses/state-cities", optionalAuth, async (req, res) => {
     try {
-      const { state, maxCities = 100 } = req.body;
+      const { state, maxCities = 500, sortBy = "size" } = req.body;
       
       if (!state) {
         return res.status(400).json({ message: "State is required" });
@@ -1320,16 +1323,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Generate up to 100 cities for selection (users can choose up to 5 for actual search)
-      const cities = await getTopCitiesForState(state, maxCities);
+      // Generate up to 500 cities for selection (users can choose up to 5 for actual search)
+      let cities = await getTopCitiesForState(state, maxCities);
+      
+      // Apply sorting based on request
+      if (sortBy === "alphabetical") {
+        cities = cities.sort((a, b) => a.localeCompare(b));
+      }
+      // Default is already by size from OpenAI response
       
       res.json({
         cities,
         state,
         count: cities.length,
+        sortBy,
         estimatedCost: {
           perCity: "$0.049",
-          total: `$${(cities.length * 0.049).toFixed(2)}`
+          total: `$${(Math.min(5, cities.length) * 0.049).toFixed(2)}` // Cost based on max 5 cities selected
         }
       });
     } catch (error) {
