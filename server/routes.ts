@@ -1258,22 +1258,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`User ${userId} has ${result.total} total businesses`);
       
-      // Check for FYVE specifically
+      // Check for specific companies
       const fyveBusinesses = result.businesses.filter(b => 
         b.name?.toLowerCase().includes('fyve')
+      );
+      const sixthCityBusinesses = result.businesses.filter(b => 
+        b.name?.toLowerCase().includes('6ixth') || b.name?.toLowerCase().includes('sixth')
       );
       
       if (fyveBusinesses.length > 0) {
         console.log('FYVE businesses found:', fyveBusinesses.map(b => ({ name: b.name, _id: b._id })));
-      } else {
-        console.log('No FYVE businesses found in database for this user');
+      }
+      if (sixthCityBusinesses.length > 0) {
+        console.log('6IXTH CITY businesses found:', sixthCityBusinesses.map(b => ({ name: b.name, _id: b._id })));
       }
       
+      // Check data structure of first few companies
+      console.log('Sample business data structure:', result.businesses.slice(0, 2).map(b => ({
+        name: b.name,
+        _id: b._id,
+        userId: b.userId,
+        hasAllFields: {
+          name: !!b.name,
+          website: !!b.website,
+          location: !!b.location,
+          userId: !!b.userId
+        }
+      })));
+      
       res.json({ 
-        businesses: result.businesses,
+        businesses: result.businesses.slice(0, 50), // Return first 50 for debugging
         total: result.total,
         fyveFound: fyveBusinesses.length > 0,
-        fyveBusinesses: fyveBusinesses
+        sixthCityFound: sixthCityBusinesses.length > 0,
+        fyveBusinesses: fyveBusinesses,
+        sixthCityBusinesses: sixthCityBusinesses,
+        sampleDataStructure: result.businesses.slice(0, 2)
       });
     } catch (error) {
       console.error("Error getting all saved businesses:", error);

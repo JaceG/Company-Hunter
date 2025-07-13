@@ -178,13 +178,38 @@ export async function getSavedBusinesses(userId: string, page: number = 1, limit
     .limit(limit)
     .toArray();
     
+  // Separately check if specific companies exist for this user (debugging)
+  const fyveCheck = await businessCollection.findOne({ 
+    userId, 
+    name: { $regex: /fyve/i } 
+  });
+  const sixthCityCheck = await businessCollection.findOne({ 
+    userId, 
+    name: { $regex: /6ixth|sixth/i } 
+  });
+  
+  if (fyveCheck) {
+    console.log('FYVE Marketing found in database:', fyveCheck.name);
+  }
+  if (sixthCityCheck) {
+    console.log('6IXTH CITY found in database:', sixthCityCheck.name);
+  }
+    
   console.log(`Found ${businesses.length} businesses for user ${userId}`);
   
-  // Check if FYVE is in the results
+  // Check if FYVE or 6IXTH CITY is in the results
   const fyveCompanies = businesses.filter(b => b.name?.toLowerCase().includes('fyve'));
+  const sixthCityCompanies = businesses.filter(b => b.name?.toLowerCase().includes('6ixth') || b.name?.toLowerCase().includes('sixth'));
+  
   if (fyveCompanies.length > 0) {
     console.log('FYVE companies found in this page:', fyveCompanies.map(c => c.name));
   }
+  if (sixthCityCompanies.length > 0) {
+    console.log('6IXTH CITY companies found in this page:', sixthCityCompanies.map(c => c.name));
+  }
+  
+  // Log first 3 company names for debugging
+  console.log('First 3 companies returned:', businesses.slice(0, 3).map(b => ({ name: b.name, _id: b._id })));
     
   return {
     businesses: businesses.map(b => ({
