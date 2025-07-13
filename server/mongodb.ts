@@ -222,6 +222,15 @@ export async function getSavedBusinesses(userId: string, page: number = 1, limit
   
   // Log first 3 company names for debugging
   console.log('First 3 companies returned:', businesses.slice(0, 3).map(b => ({ name: b.name, _id: b._id })));
+  
+  // Check if we're on the page that should contain FYVE Marketing (alphabetically)
+  const firstCompanyName = businesses[0]?.name || '';
+  const lastCompanyName = businesses[businesses.length - 1]?.name || '';
+  console.log(`Page ${page} range: "${firstCompanyName}" to "${lastCompanyName}"`);
+  
+  if (firstCompanyName <= 'FYVE Marketing' && 'FYVE Marketing' <= lastCompanyName) {
+    console.log('FYVE Marketing should be on this page based on alphabetical order');
+  }
     
   return {
     businesses: businesses.map(b => ({
