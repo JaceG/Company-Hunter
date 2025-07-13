@@ -27,12 +27,12 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
   const [hideDuplicates, setHideDuplicates] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importFromSearch = useImportFromSearch();
-  const { data: savedBusinesses } = useSavedBusinesses();
+  const { data: savedBusinessesData } = useSavedBusinesses();
   const clearAllBusinesses = useClearAllBusinesses();
   
   // Check for duplicates against saved businesses
   const businessesWithDuplicateDetection = businesses.map(business => {
-    const isDuplicate = savedBusinesses?.some((savedBusiness: any) => {
+    const isDuplicate = savedBusinessesData?.businesses?.some((savedBusiness: any) => {
       // Check website match
       if (business.website && savedBusiness.website) {
         const normalizeUrl = (url: string) => {
