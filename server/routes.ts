@@ -937,12 +937,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const businesses = [];
       let nextPageToken = null;
       
-      // Use different search approach for state-wide vs local searches
-      const isStateWideSearch = radius === "0";
-      
-      if (isStateWideSearch) {
-        // Use Text Search API for state-wide searches - much better coverage
-        const textQuery = `${businessType} in ${location}`;
+      // Use Text Search API for all searches - much better coverage and reliability
+      const textQuery = `${businessType} in ${location}`;
         
         do {
           let url = `${GOOGLE_PLACES_API_URL}/textsearch/json?query=${encodeURIComponent(textQuery)}&key=${googleApiKey}`;
@@ -981,116 +977,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 name: details.name || place.name,
                 website: details.website || '',
                 location: details.formatted_address || place.formatted_address || '',
-                distance: 'State-wide search',
+                distance: `${radius} mi radius`,
                 isBadLead: false,
                 notes: '',
-                careerLink: undefined
+                careerLink: details.website ? `${details.website.replace(/\/+$/, '')}/careers` : ""
               });
             }
           }
           
         } while (nextPageToken && businesses.length < maxResultsNum);
-        
-      } else {
-        // Use traditional nearby search for local searches
-        const geocodeResponse = await fetch(
-          `${GOOGLE_PLACES_API_URL}/findplacefromtext/json?input=${encodeURIComponent(location)}&inputtype=textquery&fields=geometry&key=${googleApiKey}`
-        );
-        
-        const geocodeData = await geocodeResponse.json();
-        
-        if (geocodeData.status !== "OK" || !geocodeData.candidates || geocodeData.candidates.length === 0) {
-          return res.status(400).json({ 
-            message: "Could not find location coordinates",
-            details: geocodeData.status
-          });
-        }
-        
-        const { lat, lng } = geocodeData.candidates[0].geometry.location;
-        
-        do {
-          let url = `${GOOGLE_PLACES_API_URL}/nearbysearch/json?location=${lat},${lng}&radius=${milesToMeters(Number(radius))}&keyword=${encodeURIComponent(businessType)}&type=establishment&key=${googleApiKey}`;
-        
-        if (nextPageToken) {
-          // Need to add pagetoken parameter if we have a token
-          url += `&pagetoken=${nextPageToken}`;
-          
-          // Google requires a delay between pagination requests
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-        
-        const placesResponse = await fetch(url);
-        const placesData = await placesResponse.json();
-        
-        if (placesData.status !== "OK" && placesData.status !== "ZERO_RESULTS") {
-          return res.status(400).json({ 
-            message: "Failed to search businesses",
-            details: placesData.status
-          });
-        }
-        
-        // Get the next page token if available
-        nextPageToken = placesData.next_page_token || null;
-        
-        // Get results from this page
-        const pageResults = placesData.results || [];
-        
-        // Only process up to the maximum number of requested results
-        const resultsToProcess = pageResults.slice(0, maxResultsNum - businesses.length);
-        
-        // Process each place result to get additional details and format the response
-        for (const place of resultsToProcess) {
-          // Check cache first to avoid repeated API calls
-          let details;
-          if (businessDetailsCache.has(place.place_id)) {
-            details = businessDetailsCache.get(place.place_id);
-          } else {
-            // Get additional details like website (keeping formatted_address since user needs it)
-            const detailsResponse = await fetch(
-              `${GOOGLE_PLACES_API_URL}/details/json?place_id=${place.place_id}&fields=name,website,formatted_address&key=${googleApiKey}`
-            );
-            
-            const detailsData = await detailsResponse.json();
-            
-            if (detailsData.status === "OK") {
-              details = detailsData.result;
-              // Cache the result to avoid repeated calls
-              businessDetailsCache.set(place.place_id, details);
-            } else {
-              continue; // Skip this place if details fail
-            }
-          }
-            
-          // Calculate distance (for demo purposes, using a formula based on lat/lng)
-          // In a real app, we could use the Google Distance Matrix API
-          const distance = calculateDistance(
-            lat, lng, 
-            place.geometry.location.lat, 
-            place.geometry.location.lng
-          );
-          
-          businesses.push({
-            name: details.name || place.name,
-            website: details.website || "",
-            location: details.formatted_address || place.vicinity || "",
-            distance: `${distance.toFixed(1)} mi`,
-            isBadLead: false,
-            notes: "",
-            isDuplicate: false,
-            careerLink: details.website ? `${details.website.replace(/\/+$/, '')}/careers` : ""
-          });
-        }
-        
-        console.log(`Fetched ${businesses.length}/${maxResultsNum} businesses so far, next page token: ${nextPageToken ? 'available' : 'none'}`);
-        
-        // Stop if we've reached the max results or this is the last page
-        if (businesses.length >= maxResultsNum || !nextPageToken) {
-          break;
-        }
-        
-      } while (true); // End of do-while loop for pagination
-      
-      } // End of nearby search block
       
       // Get user's saved businesses if user is logged in
       let userSavedBusinesses: any[] = [];
