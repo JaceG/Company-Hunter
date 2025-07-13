@@ -1248,56 +1248,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Debug endpoint to get ALL businesses without pagination
-  app.get("/api/my/businesses/all", authenticate, async (req, res) => {
+  // Find FYVE Marketing specifically 
+  app.get("/api/my/businesses/find-fyve", authenticate, async (req, res) => {
     try {
       const userId = req.user!.userId;
       
-      // Get all businesses without pagination
-      const result = await getSavedBusinesses(userId, 1, 10000); // Very high limit to get all
+      // Search through all pages to find FYVE Marketing
+      let pageFound = -1;
+      let fyveMarketingBusiness = null;
       
-      console.log(`User ${userId} has ${result.total} total businesses`);
-      
-      // Check for specific companies
-      const fyveBusinesses = result.businesses.filter(b => 
-        b.name?.toLowerCase().includes('fyve')
-      );
-      const sixthCityBusinesses = result.businesses.filter(b => 
-        b.name?.toLowerCase().includes('6ixth') || b.name?.toLowerCase().includes('sixth')
-      );
-      
-      if (fyveBusinesses.length > 0) {
-        console.log('FYVE businesses found:', fyveBusinesses.map(b => ({ name: b.name, _id: b._id })));
-      }
-      if (sixthCityBusinesses.length > 0) {
-        console.log('6IXTH CITY businesses found:', sixthCityBusinesses.map(b => ({ name: b.name, _id: b._id })));
-      }
-      
-      // Check data structure of first few companies
-      console.log('Sample business data structure:', result.businesses.slice(0, 2).map(b => ({
-        name: b.name,
-        _id: b._id,
-        userId: b.userId,
-        hasAllFields: {
-          name: !!b.name,
-          website: !!b.website,
-          location: !!b.location,
-          userId: !!b.userId
+      // Check up to 100 pages (5000 businesses)
+      for (let page = 1; page <= 100; page++) {
+        const result = await getSavedBusinesses(userId, page, 50);
+        
+        const fyveFound = result.businesses.find(b => 
+          b.name === 'FYVE Marketing' || 
+          b.name?.toLowerCase() === 'fyve marketing' ||
+          b.name?.includes('FYVE') ||
+          b.name?.includes('fyve')
+        );
+        
+        if (fyveFound) {
+          pageFound = page;
+          fyveMarketingBusiness = fyveFound;
+          console.log(`FYVE Marketing found on page ${page}: ${fyveFound.name}`);
+          break;
         }
-      })));
+        
+        // If we've checked all businesses, stop
+        if (result.businesses.length < 50) break;
+      }
       
       res.json({ 
-        businesses: result.businesses.slice(0, 50), // Return first 50 for debugging
-        total: result.total,
-        fyveFound: fyveBusinesses.length > 0,
-        sixthCityFound: sixthCityBusinesses.length > 0,
-        fyveBusinesses: fyveBusinesses,
-        sixthCityBusinesses: sixthCityBusinesses,
-        sampleDataStructure: result.businesses.slice(0, 2)
+        found: !!fyveMarketingBusiness,
+        pageFound,
+        business: fyveMarketingBusiness,
+        message: fyveMarketingBusiness ? 
+          `FYVE Marketing found on page ${pageFound}` : 
+          'FYVE Marketing not found in any page'
       });
     } catch (error) {
-      console.error("Error getting all saved businesses:", error);
-      res.status(500).json({ message: "An error occurred while getting all businesses" });
+      console.error("Error finding FYVE Marketing:", error);
+      res.status(500).json({ message: "An error occurred while searching for FYVE Marketing" });
     }
   });
 
