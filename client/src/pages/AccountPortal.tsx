@@ -490,15 +490,16 @@ export default function AccountPortal() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      // Clear React Query cache and force refresh from database
-                      queryClient.invalidateQueries({ queryKey: ["/api/my/businesses"] });
-                      queryClient.refetchQueries({ queryKey: ["/api/my/businesses"] });
-                      setCurrentPage(1); // Reset to first page
-                      
+                      // Simple page reload to force complete refresh
                       toast({
-                        title: "Companies Refreshed",
-                        description: "Data has been refreshed from the database",
+                        title: "Refreshing...",
+                        description: "Reloading page to fetch fresh data",
                       });
+                      
+                      // Force complete page reload after short delay to show toast
+                      setTimeout(() => {
+                        window.location.reload();
+                      }, 500);
                     }}
                   >
                     <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
