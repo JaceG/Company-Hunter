@@ -491,6 +491,35 @@ export default function AccountPortal() {
                 </div>
               </div>
 
+              {/* Pagination Controls - Top */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-2 py-2">
+                  <div className="flex items-center space-x-6 lg:space-x-8">
+                    <div className="flex items-center space-x-2">
+                      <p className="text-sm font-medium">Page {currentPage} of {totalPages}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(currentPage - 1)}
+                      disabled={currentPage <= 1}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(currentPage + 1)}
+                      disabled={currentPage >= totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <div className="border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader>
