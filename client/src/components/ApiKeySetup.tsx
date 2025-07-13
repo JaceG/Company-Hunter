@@ -86,38 +86,53 @@ export default function ApiKeySetup() {
           </TabsList>
           
           <TabsContent value="status" className="space-y-4">
-            <div className="flex flex-wrap gap-4 items-center">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">Google Places API:</span>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  apiKeysStatus?.hasGooglePlacesKey 
-                    ? "bg-blue-100 text-blue-700" 
-                    : "bg-red-100 text-red-700"
-                }`}>
-                  {apiKeysStatus?.hasGooglePlacesKey ? "Configured" : "Not configured"}
-                </span>
+            <div className="grid gap-4">
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center gap-3">
+                  {apiKeysStatus?.hasGooglePlacesKey ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-red-500" />
+                  )}
+                  <div>
+                    <p className="font-medium">Google Places API</p>
+                    <p className="text-sm text-gray-600">
+                      {apiKeysStatus?.hasGooglePlacesKey ? "Configured" : "Not configured"}
+                    </p>
+                  </div>
+                </div>
               </div>
               
-              <div className="flex items-center gap-2">
-                <span className="font-medium">OpenAI API:</span>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  apiKeysStatus?.hasOpenaiKey 
-                    ? "bg-blue-100 text-blue-700" 
-                    : "bg-red-100 text-red-700"
-                }`}>
-                  {apiKeysStatus?.hasOpenaiKey ? "Configured" : "Not configured"}
-                </span>
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center gap-3">
+                  {apiKeysStatus?.hasOpenaiKey ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-red-500" />
+                  )}
+                  <div>
+                    <p className="font-medium">OpenAI API</p>
+                    <p className="text-sm text-gray-600">
+                      {apiKeysStatus?.hasOpenaiKey ? "Configured" : "Not configured"}
+                    </p>
+                  </div>
+                </div>
               </div>
               
-              <div className="flex items-center gap-2">
-                <span className="font-medium">MongoDB Atlas:</span>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  apiKeysStatus?.hasMongodbUri 
-                    ? "bg-blue-100 text-blue-700" 
-                    : "bg-red-100 text-red-700"
-                }`}>
-                  {apiKeysStatus?.hasMongodbUri ? "Configured" : "Not configured"}
-                </span>
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center gap-3">
+                  {apiKeysStatus?.hasMongodbUri ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-red-500" />
+                  )}
+                  <div>
+                    <p className="font-medium">MongoDB Atlas</p>
+                    <p className="text-sm text-gray-600">
+                      {apiKeysStatus?.hasMongodbUri ? "Configured" : "Not configured"}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
             
