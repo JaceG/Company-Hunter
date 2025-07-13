@@ -118,18 +118,27 @@ The application is configured to run on Replit with:
 - Shows clear error messages if MongoDB connection is not configured
 - See SETUP.md for complete MongoDB Atlas setup instructions
 
-## Recent Cost Reduction Improvements (July 2025)
+## Recent Google API Compliance Updates (July 2025)
 
-**Problem**: Application was generating $200+ Google API charges from automatic AI-enhanced searches.
+**Problem**: Application triggered Google Maps API violation for potential data scraping, resulting in 24-hour API restriction.
 
-**Solution Implemented**:
-- **Suggestion System**: Replaced automatic 720-search AI feature with cost-effective suggestion box
-- **API Caching**: Added comprehensive caching for geocoding and business details to prevent repeated calls
-- **Field Optimization**: Removed unnecessary fields from Details API calls (kept name, website, formatted_address)
-- **Expanded Coverage**: Increased from 40 to 60-80 Ohio cities for more comprehensive manual searches
-- **Cost Transparency**: Added cost estimates and guidance in the UI
+**Root Cause**: State-wide search feature was making 300+ API calls per search (100 cities × 3+ API calls each) and permanently storing business data, violating Google ToS Section 3.2.3.
 
-**Estimated Cost Reduction**: From $200+ per AI search to ~$0.049 per manual search location.
+**Compliance Solution Implemented**:
+- **Hard Limits**: Reduced max cities from 100 to 5, max results from 200 to 50
+- **Dynamic City Generation**: Replaced hardcoded city lists with OpenAI-generated cities (cached for 24 hours)
+- **No Permanent Storage**: Results are temporary and not stored to comply with Google ToS
+- **Aggressive Caching**: 24-hour geocoding cache, 1-hour places cache to prevent repeated calls
+- **Rate Limiting**: Staggered requests with delays, batch processing of max 2 cities concurrently
+- **Reduced API Calls**: Eliminated Details API calls, use basic place data only
+
+**Compliance Features**:
+- Maximum 5 cities per search (enforced on frontend and backend)
+- Search completes in under 2 minutes with proper rate limiting
+- Clear compliance messaging in UI about temporary results
+- Fallback city lists for cases when OpenAI fails
+
+**Estimated API Usage**: Reduced from 300+ calls per search to maximum 15 calls (5 cities × 3 API calls max).
 
 ## Development Workflow
 

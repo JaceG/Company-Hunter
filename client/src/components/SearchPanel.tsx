@@ -42,8 +42,8 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
   const [stateParams, setStateParams] = useState<StateSearchParams>({
     businessType: "",
     state: "Ohio",
-    maxCities: 100,
-    maxResults: 200
+    maxCities: 5,
+    maxResults: 50
   });
   
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -333,9 +333,8 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="25">Top 25 cities</SelectItem>
-                      <SelectItem value="50">Top 50 cities</SelectItem>
-                      <SelectItem value="100">Top 100 cities</SelectItem>
+                      <SelectItem value="3">Top 3 cities</SelectItem>
+                      <SelectItem value="5">Top 5 cities (recommended)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -350,10 +349,8 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="100">100 results</SelectItem>
-                      <SelectItem value="200">200 results</SelectItem>
-                      <SelectItem value="500">500 results</SelectItem>
-                      <SelectItem value="1000">1000 results</SelectItem>
+                      <SelectItem value="25">25 results</SelectItem>
+                      <SelectItem value="50">50 results (max)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -362,7 +359,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Estimated cost: ${(stateParams.maxCities * 0.049).toFixed(2)} for {stateParams.maxCities} cities
+                  <strong>Google API Compliance:</strong> Limited to 5 cities max. Estimated cost: ${(Math.min(stateParams.maxCities, 5) * 0.049).toFixed(2)} for {Math.min(stateParams.maxCities, 5)} cities. Results are temporary and not permanently stored.
                 </AlertDescription>
               </Alert>
               

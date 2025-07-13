@@ -127,28 +127,62 @@ async function getOhioCities(): Promise<string[]> {
   }
 }
 
-async function getTopCitiesForState(state: string, maxCities: number = 100): Promise<string[]> {
+// Dynamic city generation using OpenAI (cached to reduce API calls)
+const stateCitiesCache = new Map<string, { cities: string[], timestamp: number }>();
+const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
+async function getTopCitiesForState(state: string, maxCities: number = 5): Promise<string[]> {
+  // Check cache first (24-hour cache to reduce OpenAI API calls)
+  const cacheKey = `${state}-${maxCities}`;
+  const cached = stateCitiesCache.get(cacheKey);
+  
+  if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+    return cached.cities;
+  }
+  
   try {
+    // Generate cities dynamically using OpenAI with controlled limits
     const response = await openai.chat.completions.create({
       model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
       messages: [
         {
           role: "system",
-          content: "You are a geography expert. Return only a JSON array of strings, no other text."
+          content: "You are a geography expert. Return only a JSON object with a 'cities' array containing city names as strings, no other text."
         },
         {
           role: "user",
-          content: `Provide a comprehensive list of the top ${maxCities} cities in ${state} for business searches. Include major cities, mid-size cities, suburbs, county seats, and regional business centers. Start with the largest cities and include important business areas. Format as a JSON array of city names only (no state abbreviation).`
+          content: `Provide exactly ${Math.min(maxCities, 10)} top cities in ${state} by population. Include major cities, business centers, and metropolitan areas. Return JSON in this exact format: {"cities": ["City1", "City2", "City3"]}`
         }
       ],
       response_format: { type: "json_object" },
     });
 
     const result = JSON.parse(response.choices[0].message.content || '{"cities": []}');
-    return result.cities && result.cities.length > 0 ? result.cities.slice(0, maxCities) : [`${state} cities`]; // Fallback
+    const cities = result.cities && Array.isArray(result.cities) ? result.cities.slice(0, maxCities) : [];
+    
+    // Cache the result
+    stateCitiesCache.set(cacheKey, {
+      cities,
+      timestamp: Date.now()
+    });
+    
+    return cities;
+    
   } catch (error) {
-    console.error(`Error generating top cities for ${state}:`, error);
-    return [`${state} major cities`]; // Fallback
+    console.error(`Error generating cities for ${state}:`, error);
+    
+    // Fallback to basic major cities if OpenAI fails
+    const fallbackCities: Record<string, string[]> = {
+      "California": ["Los Angeles", "San Diego", "San Jose", "San Francisco", "Sacramento"],
+      "Texas": ["Houston", "San Antonio", "Dallas", "Austin", "Fort Worth"],
+      "Florida": ["Jacksonville", "Miami", "Tampa", "Orlando", "St. Petersburg"],
+      "New York": ["New York City", "Buffalo", "Rochester", "Syracuse", "Albany"],
+      "Pennsylvania": ["Philadelphia", "Pittsburgh", "Allentown", "Erie", "Reading"],
+      "Illinois": ["Chicago", "Aurora", "Rockford", "Joliet", "Naperville"],
+      "Ohio": ["Columbus", "Cleveland", "Cincinnati", "Toledo", "Akron"]
+    };
+    
+    return fallbackCities[state]?.slice(0, maxCities) || [];
   }
 }
 
@@ -1199,18 +1233,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "State is required" });
       }
       
-      // Get user's API keys
+      // Get user's API keys for OpenAI (needed for city generation)
       const userId = req.user!.userId;
       const userApiKeys = await getApiKeys(userId);
       const openaiApiKey = userApiKeys?.openaiApiKey || process.env.OPENAI_API_KEY;
       
       if (!openaiApiKey) {
         return res.status(400).json({ 
-          message: "OpenAI API key is required. Please set up your API keys in the app settings."
+          message: "OpenAI API key is required for city generation. Please set up your API keys in the app settings."
         });
       }
       
-      const cities = await getTopCitiesForState(state, maxCities);
+      // Limit cities to prevent API violations - max 10 cities can be generated
+      const limitedMaxCities = Math.min(maxCities, 10);
+      const cities = await getTopCitiesForState(state, limitedMaxCities);
       
       res.json({
         cities,
@@ -1229,14 +1265,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // State-wide business search
+  // State-wide business search with Google API compliance
   app.post("/api/businesses/search/state", authenticate, async (req, res) => {
     try {
-      const { businessType, state, maxCities = 100, maxResults = 200 } = req.body;
+      const { businessType, state, maxCities = 5, maxResults = 50 } = req.body;
       
       if (!businessType || !state) {
         return res.status(400).json({ message: "Business type and state are required" });
       }
+      
+      // Enforce limits for API compliance - hard limits
+      const limitedMaxCities = Math.min(maxCities, 5); // Maximum 5 cities to prevent violations
+      const limitedMaxResults = Math.min(maxResults, 50); // Reduced max results
       
       // Get user's API keys
       const userId = req.user!.userId;
@@ -1249,106 +1289,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Get top cities for the state
-      const cities = await getTopCitiesForState(state, maxCities);
+      // Get top cities for the state (dynamically generated, cached for 24 hours)
+      const allCities = await getTopCitiesForState(state, 10); // Generate max 10 cities, use only 5
+      if (allCities.length === 0) {
+        return res.status(400).json({ 
+          message: `Unable to find cities for "${state}". Please try a different state or check your OpenAI API key.`
+        });
+      }
+      
+      const cities = allCities.slice(0, limitedMaxCities);
       const businesses: Business[] = [];
       let searchedCities = 0;
       
-      // Search each city
-      for (const city of cities) {
-        try {
-          searchedCities++;
+      // Process cities in batches of 2 to control API usage and stay under 2 minutes
+      const BATCH_SIZE = 2;
+      const batches = [];
+      for (let i = 0; i < cities.length; i += BATCH_SIZE) {
+        batches.push(cities.slice(i, i + BATCH_SIZE));
+      }
+      
+      for (const batch of batches) {
+        // Process batch with controlled concurrency and staggered requests
+        const batchPromises = batch.map(async (city, index) => {
+          // Stagger requests within batch to avoid rate limits
+          await new Promise(resolve => setTimeout(resolve, index * 300));
           
-          // Geocode the city
-          const geocodeUrl = `${GOOGLE_GEOCODING_API_URL}?address=${encodeURIComponent(`${city}, ${state}`)}&key=${googleApiKey}`;
-          const geocodeResponse = await fetch(geocodeUrl);
-          const geocodeData = await geocodeResponse.json();
-          
-          if (geocodeData.status !== "OK" || !geocodeData.results?.[0]) {
-            console.warn(`Failed to geocode ${city}, ${state}`);
-            continue;
-          }
-          
-          const { lat, lng } = geocodeData.results[0].geometry.location;
-          
-          // Search for businesses in this city
-          const placesUrl = `${GOOGLE_PLACES_API_URL}/nearbysearch/json?location=${lat},${lng}&radius=16093&keyword=${encodeURIComponent(businessType)}&type=establishment&key=${googleApiKey}`;
-          const placesResponse = await fetch(placesUrl);
-          const placesData = await placesResponse.json();
-          
-          if (placesData.status === "OK" && placesData.results) {
-            // Process results for this city
-            for (const place of placesData.results.slice(0, Math.floor(maxResults / cities.length))) {
-              // Get business details
-              let details;
-              if (businessDetailsCache.has(place.place_id)) {
-                details = businessDetailsCache.get(place.place_id);
-              } else {
-                const detailsResponse = await fetch(
-                  `${GOOGLE_PLACES_API_URL}/details/json?place_id=${place.place_id}&fields=name,website,formatted_address&key=${googleApiKey}`
-                );
-                const detailsData = await detailsResponse.json();
-                
-                if (detailsData.status === "OK") {
-                  details = detailsData.result;
-                  businessDetailsCache.set(place.place_id, details);
-                }
-              }
+          try {
+            searchedCities++;
+            
+            // Check geocoding cache first (24-hour cache)
+            const cityKey = `${city}, ${state}`.toLowerCase();
+            let geocodeData;
+            
+            if (geocodeCache.has(cityKey)) {
+              geocodeData = geocodeCache.get(cityKey);
+            } else {
+              const geocodeUrl = `${GOOGLE_GEOCODING_API_URL}?address=${encodeURIComponent(`${city}, ${state}`)}&key=${googleApiKey}`;
+              const geocodeResponse = await fetch(geocodeUrl);
+              geocodeData = await geocodeResponse.json();
               
-              if (details) {
-                const distance = calculateDistance(lat, lng, place.geometry.location.lat, place.geometry.location.lng);
+              // Cache for 24 hours to prevent repeated geocoding calls
+              if (geocodeData.status === "OK") {
+                geocodeCache.set(cityKey, geocodeData);
+                setTimeout(() => geocodeCache.delete(cityKey), 24 * 60 * 60 * 1000);
+              }
+            }
+            
+            if (geocodeData.status !== "OK" || !geocodeData.results?.[0]) {
+              console.warn(`Failed to geocode ${city}, ${state}`);
+              return [];
+            }
+            
+            const { lat, lng } = geocodeData.results[0].geometry.location;
+            
+            // Check places cache (1-hour cache)
+            const placesKey = `${lat},${lng}-${businessType}`.toLowerCase();
+            let placesData;
+            
+            if (businessDetailsCache.has(placesKey)) {
+              placesData = businessDetailsCache.get(placesKey);
+            } else {
+              // Search for businesses in this city
+              const placesUrl = `${GOOGLE_PLACES_API_URL}/nearbysearch/json?location=${lat},${lng}&radius=16093&keyword=${encodeURIComponent(businessType)}&type=establishment&key=${googleApiKey}`;
+              const placesResponse = await fetch(placesUrl);
+              placesData = await placesResponse.json();
+              
+              // Cache for 1 hour
+              if (placesData.status === "OK") {
+                businessDetailsCache.set(placesKey, placesData);
+                setTimeout(() => businessDetailsCache.delete(placesKey), 60 * 60 * 1000);
+              }
+            }
+            
+            const cityBusinesses: Business[] = [];
+            
+            if (placesData.status === "OK" && placesData.results) {
+              // Process results for this city (distribute results across cities)
+              const resultsPerCity = Math.max(1, Math.floor(limitedMaxResults / cities.length));
+              
+              for (const place of placesData.results.slice(0, resultsPerCity)) {
+                // Use basic place data to avoid excessive Details API calls
+                const distance = place.geometry?.location ? 
+                  calculateDistance(lat, lng, place.geometry.location.lat, place.geometry.location.lng) : 0;
                 
-                businesses.push({
-                  name: details.name || place.name,
-                  website: details.website || "",
-                  location: details.formatted_address || place.vicinity || "",
+                const business: Business = {
+                  name: place.name,
+                  website: "", // Don't fetch website details to reduce API calls
+                  location: place.vicinity || `${city}, ${state}`,
                   distance: `${distance.toFixed(1)} mi`,
                   isBadLead: false,
                   notes: "",
                   isDuplicate: false,
-                  careerLink: details.website ? `${details.website.replace(/\/+$/, '')}/careers` : ""
-                });
+                  careerLink: ""
+                };
+                
+                cityBusinesses.push(business);
               }
-              
-              // Stop if we've reached max results
-              if (businesses.length >= maxResults) break;
             }
+            
+            return cityBusinesses;
+            
+          } catch (error) {
+            console.error(`Error searching ${city}, ${state}:`, error);
+            return [];
           }
-          
-          // Stop if we've reached max results
-          if (businesses.length >= maxResults) break;
-          
-          // Add a small delay to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-        } catch (cityError) {
-          console.error(`Error searching ${city}, ${state}:`, cityError);
-          continue;
+        });
+        
+        // Wait for batch to complete
+        const batchResults = await Promise.all(batchPromises);
+        batchResults.forEach(cityBusinesses => {
+          businesses.push(...cityBusinesses);
+        });
+        
+        // Rate limiting between batches (ensures completion within 2 minutes)
+        if (batches.indexOf(batch) < batches.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 800));
         }
       }
       
-      // Clear previous search results and save new ones
-      await storage.clearAllBusinesses();
-      
-      if (businesses.length > 0) {
-        const insertBusinesses = businesses.map(business => ({
-          name: business.name,
-          website: business.website,
-          location: business.location,
-          distance: business.distance,
-          isBadLead: business.isBadLead,
-          notes: business.notes,
-          careerLink: business.careerLink
-        }));
-        
-        await storage.saveBatchBusinesses(insertBusinesses);
-      }
-      
+      // Return results WITHOUT permanently storing to comply with Google ToS
+      // Users can manually save individual businesses they're interested in
       res.json({
-        businesses,
+        businesses: businesses.slice(0, limitedMaxResults),
         total: businesses.length,
         searchedCities,
-        totalCities: cities.length
+        totalCities: allCities.length,
+        note: "Results are temporary and not stored to comply with Google Maps API terms. Save individual businesses you're interested in.",
+        compliance: {
+          maxCitiesLimited: limitedMaxCities,
+          originalRequest: { maxCities, maxResults },
+          limitReason: "Google API compliance - limited to 5 cities max"
+        }
       });
       
     } catch (error) {
