@@ -896,135 +896,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Enhanced AI-powered comprehensive search
-  app.post("/api/businesses/ai-search", optionalAuth, async (req, res) => {
+  // Generate search suggestions based on current search
+  app.post("/api/businesses/suggestions", async (req, res) => {
     try {
-      const searchParams = searchParamsSchema.parse(req.body);
-      const { businessType } = searchParams;
+      const { businessType } = req.body;
       
-      if (!API_KEY) {
-        return res.status(500).json({ 
-          message: "Google Places API key is not configured"
-        });
-      }
-
       if (!process.env.OPENAI_API_KEY) {
         return res.status(500).json({ 
           message: "OpenAI API key is not configured"
         });
       }
 
-      // Clear all existing businesses before performing a new search
-      await storage.clearAllBusinesses();
-      
-      console.log("Starting enhanced AI-powered search...");
+      console.log("Generating search suggestions...");
       
       // Generate job-focused search terms using OpenAI
-      console.log("Generating job-focused search terms with OpenAI...");
       const searchTerms = await generateJobFocusedSearchTerms(businessType);
-      console.log(`Generated ${searchTerms.length} search terms for companies that hire "${businessType}":`, searchTerms);
+      console.log(`Generated ${searchTerms.length} search suggestions for "${businessType}":`, searchTerms);
       
-      // Get comprehensive list of Ohio cities
-      console.log("Getting Ohio cities with OpenAI...");
-      const ohioCities = await getOhioCities();
-      console.log(`Generated ${ohioCities.length} Ohio cities:`, ohioCities);
+      // Get expanded list of Ohio cities (beyond top 40)
+      const ohioCities = await getExpandedOhioCities();
+      console.log(`Available cities: ${ohioCities.length} locations`);
       
-      const allBusinesses: any[] = [];
-      const uniqueBusinesses = new Map<string, any>(); // For deduplication
-      
-      let searchCount = 0;
-      const totalSearches = searchTerms.length * ohioCities.length;
-      
-      console.log(`Will perform ${totalSearches} searches (${searchTerms.length} terms × ${ohioCities.length} cities)`);
-      
-      // Search each term in each city
-      for (const searchTerm of searchTerms) {
-        for (const city of ohioCities) {
-          searchCount++;
-          console.log(`Search ${searchCount}/${totalSearches}: "${searchTerm}" in ${city}, OH`);
-          
-          try {
-            // Use Text Search API for broader coverage
-            const textQuery = `${searchTerm} in ${city}, Ohio`;
-            const url = `${GOOGLE_PLACES_API_URL}/textsearch/json?query=${encodeURIComponent(textQuery)}&key=${API_KEY}`;
-            
-            const placesResponse = await fetch(url);
-            const placesData = await placesResponse.json();
-            
-            if (placesData.status === "OK" && placesData.results) {
-              console.log(`Found ${placesData.results.length} results for "${searchTerm}" in ${city}`);
-              
-              // Process results and add unique businesses
-              for (const place of placesData.results) {
-                // Create a unique key for deduplication
-                const uniqueKey = `${place.name}-${place.place_id}`.toLowerCase();
-                
-                if (!uniqueBusinesses.has(uniqueKey)) {
-                  // Get additional details
-                  const detailsResponse = await fetch(
-                    `${GOOGLE_PLACES_API_URL}/details/json?place_id=${place.place_id}&fields=name,website,formatted_address,url&key=${API_KEY}`
-                  );
-                  
-                  const detailsData = await detailsResponse.json();
-                  
-                  if (detailsData.status === "OK") {
-                    const details = detailsData.result;
-                    
-                    const business = {
-                      name: details.name || place.name,
-                      website: details.website || '',
-                      location: details.formatted_address || place.formatted_address || '',
-                      distance: `Found in ${city}`,
-                      isBadLead: false,
-                      notes: `Found via "${searchTerm}"`,
-                      careerLink: undefined
-                    };
-                    
-                    uniqueBusinesses.set(uniqueKey, business);
-                    allBusinesses.push(business);
-                  }
-                }
-              }
-            }
-            
-            // Small delay to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-          } catch (searchError) {
-            console.error(`Error searching "${searchTerm}" in ${city}:`, searchError);
-            // Continue with next search
-          }
+      res.json({ 
+        suggestions: searchTerms,
+        availableCities: ohioCities,
+        estimatedCost: {
+          perSearch: "$0.032", // Text Search API cost
+          perDetailsCall: "$0.017", // Details API cost (only for websites)
+          total: `$${((searchTerms.length * ohioCities.length * 0.032) + (searchTerms.length * ohioCities.length * 0.017)).toFixed(2)}`
         }
-      }
-      
-      console.log(`Enhanced search complete! Found ${allBusinesses.length} unique businesses`);
-      
-      // Store all unique businesses
-      if (allBusinesses.length > 0) {
-        const savedBusinesses = await storage.saveBatchBusinesses(allBusinesses);
-        console.log(`Saved ${savedBusinesses.length} businesses to storage`);
-        
-        res.json({ 
-          businesses: savedBusinesses, 
-          total: savedBusinesses.length,
-          searchTermsUsed: searchTerms.length,
-          citiesSearched: ohioCities.length,
-          totalSearches: totalSearches
-        });
-      } else {
-        res.json({ 
-          businesses: [], 
-          total: 0,
-          searchTermsUsed: searchTerms.length,
-          citiesSearched: ohioCities.length,
-          totalSearches: totalSearches
-        });
-      }
+      });
       
     } catch (error) {
-      console.error("Enhanced search error:", error);
-      res.status(400).json({ 
-        message: "Failed to perform enhanced search", 
+      console.error("Error generating suggestions:", error);
+      res.status(500).json({ 
+        message: "Failed to generate suggestions", 
         error: error instanceof Error ? error.message : String(error)
       });
     }
