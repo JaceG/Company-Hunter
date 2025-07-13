@@ -37,7 +37,11 @@ import {
   saveApiKeys,
   getApiKeys,
   getApiKeysStatus,
-  deleteApiKeys
+  deleteApiKeys,
+  generateSearchFingerprint,
+  saveCachedSearchResult,
+  getCachedSearchResult,
+  cleanupExpiredCachedResults
 } from './mongodb';
 import { authenticate, optionalAuth } from './middleware/auth';
 
@@ -861,14 +865,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Regular location-based search
+  // Regular location-based search with intelligent caching
   app.post("/api/businesses/search", optionalAuth, async (req, res) => {
     try {
-      // Clear all existing businesses before performing a new search
-      await storage.clearAllBusinesses();
-      
       const searchParams = searchParamsSchema.parse(req.body);
       const { businessType, location, radius, maxResults } = searchParams;
+      
+      // Generate search fingerprint for caching
+      const searchFingerprint = generateSearchFingerprint({
+        businessType,
+        location,
+        radius,
+        maxResults: Number(maxResults)
+      });
+      
+      // Check for cached results first
+      console.log(`Checking cache for search fingerprint: ${searchFingerprint}`);
+      const cachedResult = await getCachedSearchResult(searchFingerprint);
+      
+      if (cachedResult) {
+        console.log(`Found cached results for ${businessType} in ${location}. Returning ${cachedResult.businesses.length} cached businesses.`);
+        
+        // Clear existing in-memory storage and load cached results
+        await storage.clearAllBusinesses();
+        const businessesToStore = cachedResult.businesses.map(b => ({
+          name: b.name,
+          website: b.website || "",
+          location: b.location,
+          distance: b.distance,
+          isBadLead: b.isBadLead,
+          notes: b.notes,
+          careerLink: b.careerLink
+        }));
+        
+        const savedBusinesses = await storage.saveBatchBusinesses(businessesToStore);
+        
+        return res.json({
+          businesses: savedBusinesses,
+          total: cachedResult.totalResults,
+          cached: true,
+          cacheAge: Math.round((Date.now() - new Date(cachedResult.createdAt).getTime()) / (1000 * 60)) // Age in minutes
+        });
+      }
+      
+      console.log(`No cached results found. Proceeding with fresh API search.`);
+      
+      // Clear all existing businesses before performing a new search
+      await storage.clearAllBusinesses();
       
       // Get API key (user's or system default)
       let googleApiKey = process.env.GOOGLE_PLACES_API_KEY;
@@ -1163,9 +1206,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const newBusinesses = updatedBusinesses.filter(b => 
         savedBusinesses.some(saved => saved.id === b.id));
       
+      // Save results to persistent cache for future searches
+      try {
+        await saveCachedSearchResult({
+          searchFingerprint,
+          searchParams: {
+            businessType,
+            location,
+            radius,
+            maxResults: Number(maxResults)
+          },
+          businesses: newBusinesses.map(b => ({
+            name: b.name,
+            website: b.website || "",
+            location: b.location,
+            distance: b.distance,
+            isBadLead: b.isBadLead,
+            notes: b.notes,
+            careerLink: b.careerLink
+          })),
+          totalResults: newBusinesses.length,
+          userId: req.user?.userId // Optional user association
+        });
+        console.log(`Cached search results for fingerprint: ${searchFingerprint}`);
+      } catch (cacheError) {
+        console.error("Error saving search results to cache:", cacheError);
+        // Don't fail the request if caching fails
+      }
+      
       res.json({
         businesses: newBusinesses,
-        total: newBusinesses.length
+        total: newBusinesses.length,
+        cached: false
       });
       
     } catch (error) {
@@ -1268,7 +1340,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // State-wide business search
+  // State-wide business search with intelligent caching
   app.post("/api/businesses/search/state", optionalAuth, async (req, res) => {
     try {
       const { businessType, state, maxCities = 5, selectedCities } = req.body;
@@ -1279,6 +1351,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Enforce limits for performance - hard limits
       const limitedMaxCities = Math.min(maxCities, 5); // Maximum 5 cities for optimal performance
+      
+      // Generate search fingerprint for caching
+      const searchFingerprint = generateSearchFingerprint({
+        businessType,
+        state,
+        selectedCities: selectedCities?.slice(0, 5), // Limit to 5 cities for fingerprint
+        maxResults: 50 // Standard limit for state searches
+      });
+      
+      // Check for cached results first
+      console.log(`Checking cache for search fingerprint: ${searchFingerprint}`);
+      const cachedResult = await getCachedSearchResult(searchFingerprint);
+      
+      if (cachedResult) {
+        console.log(`Found cached results for ${businessType} in ${state}. Returning ${cachedResult.businesses.length} cached businesses.`);
+        
+        // Clear existing in-memory storage and load cached results
+        await storage.clearAllBusinesses();
+        const businessesToStore = cachedResult.businesses.map(b => ({
+          name: b.name,
+          website: b.website || "",
+          location: b.location,
+          distance: b.distance,
+          isBadLead: b.isBadLead,
+          notes: b.notes,
+          careerLink: b.careerLink
+        }));
+        
+        const savedBusinesses = await storage.saveBatchBusinesses(businessesToStore);
+        
+        return res.json({
+          businesses: savedBusinesses,
+          total: cachedResult.totalResults,
+          searchedCities: cachedResult.searchedCities?.length || 0,
+          totalCities: cachedResult.searchedCities?.length || 0,
+          cached: true,
+          cacheAge: Math.round((Date.now() - new Date(cachedResult.createdAt).getTime()) / (1000 * 60)) // Age in minutes
+        });
+      }
+      
+      console.log(`No cached results found. Proceeding with fresh API search.`);
       
       // Get user's API keys or use system keys
       let googleApiKey = process.env.GOOGLE_PLACES_API_KEY;
@@ -1441,11 +1554,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.saveBatchBusinesses(insertBusinesses);
       }
 
+      // Save results to persistent cache for future searches
+      try {
+        await saveCachedSearchResult({
+          searchFingerprint,
+          searchParams: {
+            businessType,
+            state,
+            selectedCities: selectedCities?.slice(0, 5) || cities,
+            maxResults: 50
+          },
+          businesses: businesses.map(b => ({
+            name: b.name,
+            website: b.website || "",
+            location: b.location,
+            distance: b.distance,
+            isBadLead: b.isBadLead,
+            notes: b.notes,
+            careerLink: b.careerLink
+          })),
+          totalResults: businesses.length,
+          searchedCities: cities,
+          userId: req.user?.userId // Optional user association
+        });
+        console.log(`Cached search results for fingerprint: ${searchFingerprint}`);
+      } catch (error) {
+        console.error("Error saving search results to cache:", error);
+        // Don't fail the request if caching fails
+      }
+
       res.json({
         businesses: businesses.slice(0, limitedMaxResults),
         total: businesses.length,
         searchedCities,
         totalCities: allCities.length,
+        cached: false,
         compliance: {
           maxCitiesLimited: limitedMaxCities,
           originalRequest: { maxCities, maxResults },

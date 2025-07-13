@@ -1,7 +1,8 @@
 import { MongoClient, Db, ObjectId } from 'mongodb';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { User, UserCreate, SavedBusiness, SavedList, ApiKeys } from '@shared/schema';
+import { User, UserCreate, SavedBusiness, SavedList, ApiKeys, CachedSearchResult } from '@shared/schema';
+import crypto from 'crypto';
 
 // MongoDB connection string - REQUIRED for application to function
 const MONGODB_URI = process.env.MONGODB_URI || process.env.DATABASE_URL;
@@ -20,7 +21,8 @@ const COLLECTIONS = {
   USERS: 'users',
   SAVED_BUSINESSES: 'savedBusinesses',
   SAVED_LISTS: 'savedLists',
-  API_KEYS: 'apiKeys'
+  API_KEYS: 'apiKeys',
+  CACHED_SEARCHES: 'cachedSearches'
 };
 
 // MongoDB connection client
@@ -41,6 +43,8 @@ export async function connectToMongoDB(): Promise<Db> {
     await db.collection(COLLECTIONS.SAVED_BUSINESSES).createIndex({ userId: 1 });
     await db.collection(COLLECTIONS.SAVED_LISTS).createIndex({ userId: 1 });
     await db.collection(COLLECTIONS.API_KEYS).createIndex({ userId: 1 }, { unique: true });
+    await db.collection(COLLECTIONS.CACHED_SEARCHES).createIndex({ searchFingerprint: 1 }, { unique: true });
+    await db.collection(COLLECTIONS.CACHED_SEARCHES).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
     
     return db;
   } catch (error) {
@@ -750,5 +754,109 @@ export async function deleteApiKeys(userId: string): Promise<boolean> {
   } catch (error) {
     console.error(`Error deleting API keys for user ${userId}:`, error);
     return false;
+  }
+}
+
+// Search Fingerprinting + Persistent Result Storage functions
+
+// Generate unique fingerprint for search parameters
+export function generateSearchFingerprint(params: {
+  businessType: string,
+  location?: string,
+  state?: string,
+  selectedCities?: string[],
+  radius?: string,
+  maxResults?: number
+}): string {
+  // Normalize parameters for consistent fingerprinting
+  const normalized = {
+    businessType: params.businessType.toLowerCase().trim(),
+    location: params.location?.toLowerCase().trim(),
+    state: params.state?.toLowerCase().trim(),
+    selectedCities: params.selectedCities?.map(city => city.toLowerCase().trim()).sort(),
+    radius: params.radius,
+    maxResults: params.maxResults
+  };
+  
+  // Create deterministic hash
+  const fingerprintData = JSON.stringify(normalized);
+  return crypto.createHash('sha256').update(fingerprintData).digest('hex');
+}
+
+// Save search results to cache
+export async function saveCachedSearchResult(searchResult: Omit<CachedSearchResult, '_id'>): Promise<CachedSearchResult> {
+  try {
+    const database = await connectToMongoDB();
+    
+    // Use upsert to replace existing cache if fingerprint exists
+    const result = await database.collection(COLLECTIONS.CACHED_SEARCHES).findOneAndUpdate(
+      { searchFingerprint: searchResult.searchFingerprint },
+      { 
+        $set: {
+          ...searchResult,
+          createdAt: new Date(),
+          expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000) // 48 hour cache
+        }
+      },
+      { 
+        upsert: true, 
+        returnDocument: 'after'
+      }
+    );
+    
+    return result as CachedSearchResult;
+  } catch (error) {
+    console.error('Error saving cached search result:', error);
+    throw error;
+  }
+}
+
+// Get cached search results by fingerprint
+export async function getCachedSearchResult(searchFingerprint: string): Promise<CachedSearchResult | null> {
+  try {
+    const database = await connectToMongoDB();
+    
+    // Find non-expired cached result
+    const result = await database.collection(COLLECTIONS.CACHED_SEARCHES).findOne({
+      searchFingerprint,
+      expiresAt: { $gt: new Date() }
+    });
+    
+    return result as CachedSearchResult | null;
+  } catch (error) {
+    console.error('Error getting cached search result:', error);
+    return null;
+  }
+}
+
+// Clean up expired cached search results
+export async function cleanupExpiredCachedResults(): Promise<number> {
+  try {
+    const database = await connectToMongoDB();
+    const result = await database.collection(COLLECTIONS.CACHED_SEARCHES).deleteMany({
+      expiresAt: { $lt: new Date() }
+    });
+    
+    return result.deletedCount || 0;
+  } catch (error) {
+    console.error('Error cleaning up expired cached results:', error);
+    return 0;
+  }
+}
+
+// Get all cached searches for debugging (admin function)
+export async function getAllCachedSearches(limit: number = 50): Promise<CachedSearchResult[]> {
+  try {
+    const database = await connectToMongoDB();
+    const results = await database.collection(COLLECTIONS.CACHED_SEARCHES)
+      .find({})
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .toArray();
+    
+    return results as CachedSearchResult[];
+  } catch (error) {
+    console.error('Error getting all cached searches:', error);
+    return [];
   }
 }

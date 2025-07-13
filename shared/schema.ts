@@ -146,3 +146,34 @@ export const temporarySearchResultSchema = z.object({
 });
 
 export type TemporarySearchResult = z.infer<typeof temporarySearchResultSchema>;
+
+// Cached search results schema for preventing duplicate API calls
+export const cachedSearchResultSchema = z.object({
+  searchFingerprint: z.string().min(1, "Search fingerprint is required"),
+  searchParams: z.object({
+    businessType: z.string(),
+    location: z.string().optional(),
+    state: z.string().optional(),
+    selectedCities: z.array(z.string()).optional(),
+    radius: z.string().optional(),
+    maxResults: z.number().optional(),
+  }),
+  businesses: z.array(z.object({
+    name: z.string(),
+    website: z.string().optional(),
+    location: z.string(),
+    distance: z.string(),
+    isBadLead: z.boolean().default(false),
+    notes: z.string().default(""),
+    careerLink: z.string().default(""),
+  })),
+  totalResults: z.number(),
+  searchedCities: z.array(z.string()).optional(),
+  createdAt: z.date().default(() => new Date()),
+  expiresAt: z.date().default(() => new Date(Date.now() + 48 * 60 * 60 * 1000)), // 48 hour cache
+  userId: z.string().optional(), // Optional for system-wide caching
+});
+
+export type CachedSearchResult = z.infer<typeof cachedSearchResultSchema> & {
+  _id?: string;
+};
