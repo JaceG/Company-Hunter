@@ -316,12 +316,12 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="businessType">Business Type</Label>
+                <Label htmlFor="businessType">Business/Job Type</Label>
                 <Input
                   id="businessType"
                   value={searchParams.businessType}
                   onChange={handleInputChange}
-                  placeholder="e.g., software companies, dental offices, marketing agencies"
+                  placeholder="e.g., software companies, marketing manager, dental offices"
                 />
                 {showSuggestions && suggestions.length > 0 && (
                   <div className="text-xs text-muted-foreground space-y-1">
@@ -352,24 +352,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
                 />
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="radius">Search Radius</Label>
-                  <Select value={searchParams.radius} onValueChange={(value) => handleSelectChange(value, 'radius')}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="5">5 miles</SelectItem>
-                      <SelectItem value="10">10 miles</SelectItem>
-                      <SelectItem value="20">20 miles</SelectItem>
-                      <SelectItem value="50">50 miles</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
 
-              </div>
               
               <Button type="submit" disabled={isLoading || !apiKeysStatus?.hasGooglePlacesKey} className="w-full">
                 {isLoading ? "Searching..." : "Search Businesses"}
@@ -400,12 +383,12 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="state-business-type">Business Type</Label>
+                <Label htmlFor="state-business-type">Business/Job Type</Label>
                 <Input
                   id="state-business-type"
                   value={stateParams.businessType}
                   onChange={(e) => handleStateInputChange('businessType', e.target.value)}
-                  placeholder="e.g., software companies, dental offices, marketing agencies"
+                  placeholder="e.g., software companies, marketing manager, dental offices"
                 />
                 {showSuggestions && suggestions.length > 0 && (
                   <div className="text-xs text-muted-foreground space-y-1">

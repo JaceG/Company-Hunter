@@ -79,7 +79,7 @@ export type SavedList = z.infer<typeof savedListSchema> & {
 
 // Search parameters
 export const searchParamsSchema = z.object({
-  businessType: z.string().min(1, "Business type is required"),
+  businessType: z.string().min(1, "Business/Job type is required"),
   location: z.string().min(1, "Location is required"),
 });
 
@@ -120,7 +120,7 @@ export type ApiKeys = z.infer<typeof apiKeysSchema> & {
 
 // State-based search parameters
 export const stateSearchParamsSchema = z.object({
-  businessType: z.string().min(1, "Business type is required"),
+  businessType: z.string().min(1, "Business/Job type is required"),
   state: z.string().min(2, "State is required"),
   maxCities: z.number().min(1).max(5).default(5), // Reduced for compliance
   selectedCities: z.array(z.string()).optional(), // For checkbox-selected cities
