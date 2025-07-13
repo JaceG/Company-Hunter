@@ -111,6 +111,7 @@ export const apiKeysSchema = z.object({
   userId: z.string(),
   googlePlacesApiKey: z.string().optional(),
   openaiApiKey: z.string().optional(),
+  mongodbUri: z.string().optional(),
   createdAt: z.date().optional(),
   updatedAt: z.date().optional()
 });

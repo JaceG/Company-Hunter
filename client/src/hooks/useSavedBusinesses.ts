@@ -11,12 +11,12 @@ export interface SavedBusiness extends Omit<Business, 'id'> {
   updatedAt?: Date;
 }
 
-// Get all saved businesses for the current user
-export function useSavedBusinesses() {
+// Get all saved businesses for the current user with pagination
+export function useSavedBusinesses(page: number = 1, limit: number = 50) {
   return useQuery({
-    queryKey: ["/api/my/businesses"],
+    queryKey: ["/api/my/businesses", page, limit],
     queryFn: async () => {
-      return await apiRequest("GET", "/api/my/businesses");
+      return await apiRequest("GET", `/api/my/businesses?page=${page}&limit=${limit}`);
     },
   });
 }

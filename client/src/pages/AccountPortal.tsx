@@ -18,7 +18,9 @@ import { useApiKeys } from "@/hooks/useApiKeys";
 
 export default function AccountPortal() {
   const { user, isLoading: isAuthLoading, isAuthenticated } = useAuth();
-  const { data: savedBusinesses, isLoading: isBusinessesLoading, error } = useSavedBusinesses();
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(50);
+  const { data: savedBusinessesData, isLoading: isBusinessesLoading, error } = useSavedBusinesses(currentPage, pageSize);
   const { data: apiKeysStatus } = useApiKeys();
   const updateBusinessMutation = useUpdateSavedBusiness();
   const deleteBusinessMutation = useDeleteSavedBusiness();
@@ -29,9 +31,7 @@ export default function AccountPortal() {
   const [, setLocation] = useLocation();
   
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterBadLeads, setFilterBadLeads] = useState(false);
   const [filterRecentOnly, setFilterRecentOnly] = useState(false);
-  const [filterColumbus20Miles, setFilterColumbus20Miles] = useState(false);
   const [columbusCoords, setColumbusCoords] = useState<{lat: number, lng: number} | null>(null);
   const [businessCoords, setBusinessCoords] = useState<Map<string, {lat: number, lng: number}>>(new Map());
   const [geocodingInProgress, setGeocodingInProgress] = useState<Set<string>>(new Set());
@@ -55,12 +55,9 @@ export default function AccountPortal() {
     }
   }, [isAuthLoading, isAuthenticated, setLocation]);
 
-  // Get Columbus, Ohio coordinates when location filter is enabled
-  useEffect(() => {
-    if (filterColumbus20Miles && !columbusCoords) {
-      getColumbusCoordinates();
-    }
-  }, [filterColumbus20Miles, columbusCoords]);
+  const savedBusinesses = savedBusinessesData?.businesses || [];
+  const totalBusinesses = savedBusinessesData?.total || 0;
+  const totalPages = savedBusinessesData?.totalPages || 0;
 
   const getColumbusCoordinates = async () => {
     try {
@@ -158,42 +155,10 @@ export default function AccountPortal() {
         (business.website && business.website.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (business.location && business.location.toLowerCase().includes(searchTerm.toLowerCase()));
       
-      // Apply bad lead filter
-      const badLeadMatch = !filterBadLeads || !business.isBadLead;
-      
       // Apply recent only filter
       const recentMatch = !filterRecentOnly || isRecentlyAdded(business);
       
-      // Apply Columbus 20-mile radius filter using coordinates
-      let columbusMatch = true;
-      if (filterColumbus20Miles) {
-        if (!business._id || !business.location) {
-          columbusMatch = false;
-        } else if (businessCoords.has(business._id)) {
-          // We have coordinates, calculate distance
-          const coords = businessCoords.get(business._id)!;
-          if (columbusCoords) {
-            const distance = calculateDistance(
-              columbusCoords.lat,
-              columbusCoords.lng,
-              coords.lat,
-              coords.lng
-            );
-            columbusMatch = distance <= 20;
-          } else {
-            columbusMatch = false;
-          }
-        } else {
-          // No coordinates yet - trigger geocoding for this business
-          if (!geocodingInProgress.has(business._id)) {
-            geocodeBusiness(business);
-          }
-          // For now, show the business while geocoding is in progress
-          columbusMatch = true;
-        }
-      }
-      
-      return searchMatch && badLeadMatch && recentMatch && columbusMatch;
+      return searchMatch && recentMatch;
     })
     .sort((a, b) => {
       // Apply sorting
@@ -332,36 +297,11 @@ export default function AccountPortal() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <Checkbox 
-                  id="filter-bad-leads" 
-                  checked={filterBadLeads}
-                  onCheckedChange={(checked) => setFilterBadLeads(checked === true)}
-                />
-                <Label htmlFor="filter-bad-leads">Hide Bad Leads</Label>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <Checkbox 
                   id="filter-recent-only" 
                   checked={filterRecentOnly}
                   onCheckedChange={(checked) => setFilterRecentOnly(checked === true)}
                 />
                 <Label htmlFor="filter-recent-only">Show Recent Only (24h)</Label>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Checkbox 
-                  id="filter-columbus-20miles" 
-                  checked={filterColumbus20Miles}
-                  onCheckedChange={(checked) => setFilterColumbus20Miles(checked === true)}
-                />
-                <Label htmlFor="filter-columbus-20miles" className="flex items-center gap-2">
-                  Within 20 miles of Columbus, OH
-                  {filterColumbus20Miles && geocodingInProgress.size > 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      (Calculating distances... {geocodingInProgress.size} remaining)
-                    </span>
-                  )}
-                </Label>
               </div>
             </div>
           </div>
@@ -399,7 +339,7 @@ export default function AccountPortal() {
                 </div>
                 
                 <div className="text-sm text-muted-foreground">
-                  Showing {filteredBusinesses.length} of {savedBusinesses?.length || 0} companies
+                  Showing {filteredBusinesses.length} of {totalBusinesses} companies (Page {currentPage} of {totalPages})
                 </div>
               </div>
 
@@ -483,6 +423,35 @@ export default function AccountPortal() {
                   </TableBody>
                 </Table>
               </div>
+              
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-2">
+                  <div className="flex items-center space-x-6 lg:space-x-8">
+                    <div className="flex items-center space-x-2">
+                      <p className="text-sm font-medium">Page {currentPage} of {totalPages}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(currentPage - 1)}
+                      disabled={currentPage <= 1}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(currentPage + 1)}
+                      disabled={currentPage >= totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

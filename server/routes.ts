@@ -342,17 +342,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/api-keys", authenticate, async (req, res) => {
     try {
       const userId = req.user!.userId;
-      const { googlePlacesApiKey, openaiApiKey } = req.body;
+      const { googlePlacesApiKey, openaiApiKey, mongodbUri } = req.body;
       
       const apiKeys = await saveApiKeys(userId, {
         googlePlacesApiKey: googlePlacesApiKey || undefined,
-        openaiApiKey: openaiApiKey || undefined
+        openaiApiKey: openaiApiKey || undefined,
+        mongodbUri: mongodbUri || undefined
       });
       
       // Don't send actual keys back
       res.json({
         hasGooglePlacesKey: !!(apiKeys?.googlePlacesApiKey),
         hasOpenaiKey: !!(apiKeys?.openaiApiKey),
+        hasMongodbUri: !!(apiKeys?.mongodbUri),
         updatedAt: apiKeys.updatedAt
       });
     } catch (error) {
@@ -380,12 +382,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // User's saved businesses endpoints
   
-  // Get user's saved businesses
+  // Get user's saved businesses with pagination
   app.get("/api/my/businesses", authenticate, async (req, res) => {
     try {
       const userId = req.user!.userId;
-      const businesses = await getSavedBusinesses(userId);
-      res.json(businesses);
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const result = await getSavedBusinesses(userId, page, limit);
+      res.json(result);
     } catch (error) {
       console.error("Error fetching saved businesses:", error);
       res.status(500).json({ message: "An error occurred while fetching saved businesses" });
@@ -1177,7 +1182,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Generate search suggestions based on current search
   app.post("/api/businesses/suggestions", optionalAuth, async (req, res) => {
     try {
-      const { businessType } = req.body;
+      const { jobRole } = req.body;
+      
+      if (!jobRole || !jobRole.trim()) {
+        return res.status(400).json({ 
+          message: "Job role is required for generating suggestions"
+        });
+      }
       
       // Use user's OpenAI key if available, otherwise use system key
       let openaiToUse = openai;
@@ -1188,31 +1199,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      if (!openaiToUse && !process.env.OPENAI_API_KEY) {
+      if (!process.env.OPENAI_API_KEY && (!req.user?.userId || !openaiToUse)) {
         return res.status(400).json({ 
-          message: "OpenAI API key is required. Please set up your API keys or configure system-wide keys."
+          message: "OpenAI API key is required. Please set up your API keys in Account Portal."
         });
       }
 
       console.log("Generating search suggestions...");
       
       // Generate job-focused search terms using OpenAI
-      const searchTerms = await generateJobFocusedSearchTerms(businessType);
-      console.log(`Generated ${searchTerms.length} search suggestions for "${businessType}":`, searchTerms);
-      
-      // Get expanded list of Ohio cities (beyond top 40)
-      const ohioCities = await getExpandedOhioCities();
-      console.log(`Available cities: ${ohioCities.length} locations`);
+      const searchTerms = await generateJobFocusedSearchTerms(jobRole);
+      console.log(`Generated ${searchTerms.length} search suggestions for "${jobRole}":`, searchTerms);
       
       res.json({ 
-        suggestions: searchTerms,
-        availableCities: ohioCities,
-        estimatedCost: {
-          perSearch: "$0.049", // Combined Text Search + Details API cost
-          perLocation: "$0.049",
-          perTerm: `$${(ohioCities.length * 0.049).toFixed(2)}`,
-          comprehensive: `$${(searchTerms.length * ohioCities.length * 0.049).toFixed(2)}`
-        }
+        suggestions: searchTerms
       });
       
     } catch (error) {
@@ -1225,27 +1225,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get available cities for a specific state
-  app.post("/api/businesses/state-cities", authenticate, async (req, res) => {
+  app.post("/api/businesses/state-cities", optionalAuth, async (req, res) => {
     try {
-      const { state, maxCities = 100 } = req.body;
+      const { state, maxCities = 5 } = req.body;
       
       if (!state) {
         return res.status(400).json({ message: "State is required" });
       }
       
-      // Get user's API keys for OpenAI (needed for city generation)
-      const userId = req.user!.userId;
-      const userApiKeys = await getApiKeys(userId);
-      const openaiApiKey = userApiKeys?.openaiApiKey || process.env.OPENAI_API_KEY;
+      // Get user's API keys for OpenAI (needed for city generation) or use system keys
+      let openaiApiKey = process.env.OPENAI_API_KEY;
+      if (req.user?.userId) {
+        const userApiKeys = await getApiKeys(req.user.userId);
+        if (userApiKeys?.openaiApiKey) {
+          openaiApiKey = userApiKeys.openaiApiKey;
+        }
+      }
       
       if (!openaiApiKey) {
         return res.status(400).json({ 
-          message: "OpenAI API key is required for city generation. Please set up your API keys in the app settings."
+          message: "OpenAI API key is required for city generation. Please set up your API keys in the app settings or configure system-wide keys."
         });
       }
       
-      // Limit cities to prevent API violations - max 10 cities can be generated
-      const limitedMaxCities = Math.min(maxCities, 10);
+      // Limit cities to prevent API violations - max 5 cities can be generated
+      const limitedMaxCities = Math.min(maxCities, 5);
       const cities = await getTopCitiesForState(state, limitedMaxCities);
       
       res.json({
@@ -1260,13 +1264,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error getting state cities:", error);
       res.status(500).json({ 
-        message: "Failed to get cities for the specified state." 
+        message: "Failed to get cities for the specified state. Please check your API key setup." 
       });
     }
   });
 
-  // State-wide business search with Google API compliance
-  app.post("/api/businesses/search/state", authenticate, async (req, res) => {
+  // State-wide business search
+  app.post("/api/businesses/search/state", optionalAuth, async (req, res) => {
     try {
       const { businessType, state, maxCities = 5, maxResults = 50 } = req.body;
       
@@ -1274,18 +1278,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Business type and state are required" });
       }
       
-      // Enforce limits for API compliance - hard limits
-      const limitedMaxCities = Math.min(maxCities, 5); // Maximum 5 cities to prevent violations
+      // Enforce limits for performance - hard limits
+      const limitedMaxCities = Math.min(maxCities, 5); // Maximum 5 cities for optimal performance
       const limitedMaxResults = Math.min(maxResults, 50); // Reduced max results
       
-      // Get user's API keys
-      const userId = req.user!.userId;
-      const userApiKeys = await getApiKeys(userId);
-      const googleApiKey = userApiKeys?.googlePlacesApiKey || process.env.GOOGLE_PLACES_API_KEY;
+      // Get user's API keys or use system keys
+      let googleApiKey = process.env.GOOGLE_PLACES_API_KEY;
+      let openaiApiKey = process.env.OPENAI_API_KEY;
+      
+      if (req.user?.userId) {
+        const userApiKeys = await getApiKeys(req.user.userId);
+        if (userApiKeys?.googlePlacesApiKey) {
+          googleApiKey = userApiKeys.googlePlacesApiKey;
+        }
+        if (userApiKeys?.openaiApiKey) {
+          openaiApiKey = userApiKeys.openaiApiKey;
+        }
+      }
       
       if (!googleApiKey) {
         return res.status(400).json({ 
-          message: "Google Places API key is required. Please set up your API keys."
+          message: "Google Places API key is required. Please set up your API keys or configure system-wide keys."
         });
       }
       

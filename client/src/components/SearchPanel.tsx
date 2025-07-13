@@ -46,6 +46,8 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
     maxResults: 50
   });
   
+  const [jobRole, setJobRole] = useState("");
+  
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [availableCities, setAvailableCities] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -136,11 +138,21 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
     }
   };
 
-  const handleGetSuggestions = async () => {
-    if (!searchParams.businessType.trim()) {
+  const handleGetSuggestions = async (targetJobRole?: string) => {
+    const roleToUse = targetJobRole || jobRole;
+    if (!roleToUse.trim()) {
       toast({
         title: "Job role is required",
         description: "Please enter your job role to get search suggestions",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!apiKeysStatus?.hasOpenaiKey) {
+      toast({
+        title: "OpenAI API key required",
+        description: "Please set up your OpenAI API key for AI suggestions",
         variant: "destructive"
       });
       return;
@@ -154,7 +166,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          businessType: searchParams.businessType
+          jobRole: roleToUse
         }),
       });
       
@@ -164,12 +176,11 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
       
       const data = await response.json();
       setSuggestions(data.suggestions || []);
-      setAvailableCities(data.availableCities || []);
       setShowSuggestions(true);
       
       toast({
-        title: "Suggestions generated",
-        description: `Generated ${data.suggestions?.length || 0} search terms for ${data.availableCities?.length || 0} cities`,
+        title: "AI suggestions generated",
+        description: `Generated ${data.suggestions?.length || 0} business search terms for ${roleToUse}`,
       });
     } catch (error) {
       console.error('Error getting suggestions:', error);
@@ -230,22 +241,60 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
         )}
 
         <Tabs defaultValue="single" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 text-xs">
-            <TabsTrigger value="single" className="text-xs">Single</TabsTrigger>
-            <TabsTrigger value="state" className="text-xs">State</TabsTrigger>
-            <TabsTrigger value="suggestions" className="text-xs">AI</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 text-xs">
+            <TabsTrigger value="single" className="text-xs">Single Search</TabsTrigger>
+            <TabsTrigger value="state" className="text-xs">State Search</TabsTrigger>
           </TabsList>
           
           <TabsContent value="single" className="space-y-4">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="businessType">Business Type / Job Role</Label>
+                <Label htmlFor="jobRole">Job Role (for AI suggestions)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="jobRole"
+                    value={jobRole}
+                    onChange={(e) => setJobRole(e.target.value)}
+                    placeholder="e.g., software engineer, marketing manager"
+                  />
+                  <Button 
+                    type="button"
+                    variant="outline" 
+                    onClick={() => handleGetSuggestions()}
+                    disabled={loadingSuggestions || !jobRole.trim() || !apiKeysStatus?.hasOpenaiKey}
+                    className="shrink-0"
+                  >
+                    <Sparkles className="w-4 h-4 mr-1" />
+                    {loadingSuggestions ? "Generating..." : "Get AI Suggestions"}
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="businessType">Business Type</Label>
                 <Input
                   id="businessType"
                   value={searchParams.businessType}
                   onChange={handleInputChange}
-                  placeholder="e.g., software engineer, marketing manager, dentist"
+                  placeholder="e.g., software companies, dental offices, marketing agencies"
                 />
+                {showSuggestions && suggestions.length > 0 && (
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p>AI Suggestions (click to use):</p>
+                    <div className="flex flex-wrap gap-1">
+                      {suggestions.map((suggestion, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => setSearchParams(prev => ({ ...prev, businessType: suggestion }))}
+                          className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs border border-blue-200"
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               
               <div className="space-y-2">
@@ -299,13 +348,52 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
           <TabsContent value="state" className="space-y-4">
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="state-business-type">Business Type / Job Role</Label>
+                <Label htmlFor="state-job-role">Job Role (for AI suggestions)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="state-job-role"
+                    value={jobRole}
+                    onChange={(e) => setJobRole(e.target.value)}
+                    placeholder="e.g., software engineer, marketing manager"
+                  />
+                  <Button 
+                    type="button"
+                    variant="outline" 
+                    onClick={() => handleGetSuggestions()}
+                    disabled={loadingSuggestions || !jobRole.trim() || !apiKeysStatus?.hasOpenaiKey}
+                    className="shrink-0"
+                  >
+                    <Sparkles className="w-4 h-4 mr-1" />
+                    {loadingSuggestions ? "Generating..." : "Get AI Suggestions"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="state-business-type">Business Type</Label>
                 <Input
                   id="state-business-type"
                   value={stateParams.businessType}
                   onChange={(e) => handleStateInputChange('businessType', e.target.value)}
-                  placeholder="e.g., software engineer, marketing manager, dentist"
+                  placeholder="e.g., software companies, dental offices, marketing agencies"
                 />
+                {showSuggestions && suggestions.length > 0 && (
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p>AI Suggestions (click to use):</p>
+                    <div className="flex flex-wrap gap-1">
+                      {suggestions.map((suggestion, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => handleStateInputChange('businessType', suggestion)}
+                          className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs border border-blue-200"
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               
               <div className="space-y-2">
@@ -379,66 +467,6 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
               >
                 {stateCities.isPending ? "Loading..." : `Preview Cities for ${stateParams.state}`}
               </Button>
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="suggestions" className="space-y-4">
-            {!apiKeysStatus?.hasOpenaiKey && (
-              <Alert>
-                <Key className="h-4 w-4" />
-                <AlertDescription>
-                  OpenAI API key required for AI suggestions. Please set up your API keys.
-                </AlertDescription>
-              </Alert>
-            )}
-            
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="suggestion-job">Job Role</Label>
-                <Input
-                  id="suggestion-job"
-                  value={searchParams.businessType}
-                  onChange={handleInputChange}
-                  placeholder="e.g., software engineer, marketing manager"
-                />
-              </div>
-              
-              <Button 
-                onClick={handleGetSuggestions}
-                disabled={loadingSuggestions || !apiKeysStatus?.hasOpenaiKey}
-                className="w-full"
-              >
-                <Sparkles className="h-4 w-4 mr-2" />
-                {loadingSuggestions ? "Generating..." : "Generate AI Suggestions"}
-              </Button>
-              
-              {showSuggestions && suggestions.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Suggested Search Terms</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {suggestions.map((suggestion, index) => (
-                      <Button
-                        key={index}
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSearchParams(prev => ({ ...prev, businessType: suggestion }))}
-                      >
-                        {suggestion}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              {availableCities.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Available Cities ({availableCities.length})</Label>
-                  <div className="text-sm text-gray-600 max-h-32 overflow-y-auto">
-                    {availableCities.slice(0, 20).join(", ")}
-                    {availableCities.length > 20 && "..."}
-                  </div>
-                </div>
-              )}
             </div>
           </TabsContent>
         </Tabs>

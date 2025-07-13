@@ -118,7 +118,26 @@ The application is configured to run on Replit with:
 - Shows clear error messages if MongoDB connection is not configured
 - See SETUP.md for complete MongoDB Atlas setup instructions
 
-## Recent API Optimization Updates (July 2025)
+## Recent Updates (July 2025)
+
+### AI Job Role Search Integration ✅
+**Completed**: Successfully integrated AI-powered job role search into both Single Search and State Search tabs.
+
+**Features Added**:
+- **Job Role Input Field**: Separate field for entering job roles (e.g., "software engineer", "marketing manager")
+- **AI Business Suggestions**: OpenAI generates 12-18 relevant business types for job seekers
+- **Click-to-Use Interface**: Generated suggestions can be clicked to auto-fill business type field
+- **Smart API Key Management**: Uses user's OpenAI key or falls back to system key
+- **Consolidated Interface**: Reduced from 3 tabs to 2 (Single Search, State Search) with AI integrated
+
+**User Flow**:
+1. User enters their job role (e.g., "web developer")
+2. Clicks "Get AI Suggestions" button
+3. AI generates relevant company types ("software company", "web development agency", "tech startup", etc.)
+4. User clicks suggestions to populate business search field
+5. Performs normal search with AI-enhanced terms
+
+### API Optimization Updates
 
 **Problem**: Previous state-wide search was making 300+ API calls per search, causing performance issues and high costs.
 
@@ -137,6 +156,15 @@ The application is configured to run on Replit with:
 - Fallback city lists for reliable operation
 
 **Estimated API Usage**: Reduced from 300+ calls per search to maximum 15 calls (5 cities × 3 API calls max) while maintaining all core features.
+
+### MongoDB URI Management ✅
+**Completed**: Added MongoDB URI configuration interface in Account Portal.
+
+**Features**:
+- Users can now configure custom MongoDB Atlas connection strings
+- Environment variable fallback support maintained
+- Secure storage with other API keys
+- Status indicator shows "Custom URI configured" vs "Using environment variable"
 
 ## Development Workflow
 

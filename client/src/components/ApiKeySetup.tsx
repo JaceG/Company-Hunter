@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 export default function ApiKeySetup() {
   const [googleKey, setGoogleKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
+  const [mongodbUri, setMongodbUri] = useState("");
   const [showKeys, setShowKeys] = useState(false);
 
   const { data: apiKeysStatus, isLoading } = useApiKeys();
@@ -24,20 +25,22 @@ export default function ApiKeySetup() {
       await saveApiKeys.mutateAsync({
         googlePlacesApiKey: googleKey || undefined,
         openaiApiKey: openaiKey || undefined,
+        mongodbUri: mongodbUri || undefined,
       });
       
       toast({
-        title: "API Keys Saved",
-        description: "Your API keys have been securely saved.",
+        title: "Configuration Saved",
+        description: "Your API keys and database configuration have been securely saved.",
       });
       
       setGoogleKey("");
       setOpenaiKey("");
+      setMongodbUri("");
       setShowKeys(false);
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to save API keys. Please try again.",
+        description: "Failed to save configuration. Please try again.",
         variant: "destructive",
       });
     }
@@ -115,6 +118,22 @@ export default function ApiKeySetup() {
                   </div>
                 </div>
               </div>
+              
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center gap-3">
+                  {apiKeysStatus?.hasMongodbUri ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-red-500" />
+                  )}
+                  <div>
+                    <p className="font-medium">MongoDB Atlas</p>
+                    <p className="text-sm text-gray-600">
+                      {apiKeysStatus?.hasMongodbUri ? "Custom URI configured" : "Using environment variable"}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
             
             {(apiKeysStatus?.hasGooglePlacesKey || apiKeysStatus?.hasOpenaiKey) && (
@@ -161,6 +180,20 @@ export default function ApiKeySetup() {
                 />
               </div>
               
+              <div className="space-y-2">
+                <Label htmlFor="mongodb-uri">MongoDB Atlas URI (Optional)</Label>
+                <Input
+                  id="mongodb-uri"
+                  type={showKeys ? "text" : "password"}
+                  value={mongodbUri}
+                  onChange={(e) => setMongodbUri(e.target.value)}
+                  placeholder="mongodb+srv://username:password@cluster.mongodb.net/database"
+                />
+                <p className="text-xs text-gray-500">
+                  Leave empty to use environment variable. Only set if you want to use a custom database.
+                </p>
+              </div>
+              
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -173,10 +206,10 @@ export default function ApiKeySetup() {
               
               <Button 
                 onClick={handleSave}
-                disabled={saveApiKeys.isPending || (!googleKey && !openaiKey)}
+                disabled={saveApiKeys.isPending || (!googleKey && !openaiKey && !mongodbUri)}
                 className="w-full"
               >
-                {saveApiKeys.isPending ? "Saving..." : "Save API Keys"}
+                {saveApiKeys.isPending ? "Saving..." : "Save Configuration"}
               </Button>
             </div>
           </TabsContent>

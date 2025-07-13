@@ -4,12 +4,14 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 interface ApiKeysStatus {
   hasGooglePlacesKey: boolean;
   hasOpenaiKey: boolean;
+  hasMongodbUri: boolean;
   updatedAt?: string;
 }
 
 interface SaveApiKeysData {
   googlePlacesApiKey?: string;
   openaiApiKey?: string;
+  mongodbUri?: string;
 }
 
 export function useApiKeys() {

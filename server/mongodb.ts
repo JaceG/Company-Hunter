@@ -153,16 +153,33 @@ export async function saveBusiness(business: SavedBusiness): Promise<SavedBusine
   return { ...businessWithTimestamps, _id: result.insertedId.toString() };
 }
 
-export async function getSavedBusinesses(userId: string): Promise<SavedBusiness[]> {
+export async function getSavedBusinesses(userId: string, page: number = 1, limit: number = 50): Promise<{businesses: SavedBusiness[], total: number, page: number, totalPages: number}> {
   const database = await connectToMongoDB();
   const businessCollection = database.collection<SavedBusiness>(COLLECTIONS.SAVED_BUSINESSES);
 
-  // Find all businesses for this user
-  const businesses = await businessCollection.find({ userId }).toArray();
-  return businesses.map(b => ({
-    ...b,
-    _id: b._id!.toString()
-  }));
+  const skip = (page - 1) * limit;
+  
+  // Get total count for pagination
+  const total = await businessCollection.countDocuments({ userId });
+  const totalPages = Math.ceil(total / limit);
+  
+  // Find all businesses for this user with pagination
+  const businesses = await businessCollection
+    .find({ userId })
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .toArray();
+    
+  return {
+    businesses: businesses.map(b => ({
+      ...b,
+      _id: b._id!.toString()
+    })),
+    total,
+    page,
+    totalPages
+  };
 }
 
 export async function getSavedBusinessById(id: string): Promise<SavedBusiness | null> {
@@ -646,7 +663,7 @@ export async function importBusinessesForUser(
 }
 
 // API Keys Management Functions
-export async function saveApiKeys(userId: string, apiKeys: Partial<Pick<ApiKeys, 'googlePlacesApiKey' | 'openaiApiKey'>>): Promise<ApiKeys> {
+export async function saveApiKeys(userId: string, apiKeys: Partial<Pick<ApiKeys, 'googlePlacesApiKey' | 'openaiApiKey' | 'mongodbUri'>>): Promise<ApiKeys> {
   const database = await connectToMongoDB();
   const apiKeysCollection = database.collection<ApiKeys>(COLLECTIONS.API_KEYS);
 
@@ -654,6 +671,7 @@ export async function saveApiKeys(userId: string, apiKeys: Partial<Pick<ApiKeys,
     userId,
     googlePlacesApiKey: apiKeys.googlePlacesApiKey,
     openaiApiKey: apiKeys.openaiApiKey,
+    mongodbUri: apiKeys.mongodbUri,
     createdAt: new Date(),
     updatedAt: new Date()
   };
@@ -695,17 +713,19 @@ export async function getApiKeys(userId: string): Promise<ApiKeys | null> {
   };
 }
 
-export async function getApiKeysStatus(userId: string): Promise<{hasGooglePlacesKey: boolean, hasOpenaiKey: boolean, updatedAt?: string}> {
+export async function getApiKeysStatus(userId: string): Promise<{hasGooglePlacesKey: boolean, hasOpenaiKey: boolean, hasMongodbUri: boolean, updatedAt?: string}> {
   try {
     const userApiKeys = await getApiKeys(userId);
     
     // Check if API keys are available (either user-provided or server environment)
     const hasGooglePlacesKey = !!(userApiKeys?.googlePlacesApiKey || process.env.GOOGLE_PLACES_API_KEY);
     const hasOpenaiKey = !!(userApiKeys?.openaiApiKey || process.env.OPENAI_API_KEY);
+    const hasMongodbUri = !!(userApiKeys?.mongodbUri);
     
     return {
       hasGooglePlacesKey,
       hasOpenaiKey,
+      hasMongodbUri,
       updatedAt: userApiKeys?.updatedAt?.toISOString()
     };
   } catch (error) {
@@ -713,7 +733,8 @@ export async function getApiKeysStatus(userId: string): Promise<{hasGooglePlaces
     // If there's an error, still check server environment variables
     return {
       hasGooglePlacesKey: !!process.env.GOOGLE_PLACES_API_KEY,
-      hasOpenaiKey: !!process.env.OPENAI_API_KEY
+      hasOpenaiKey: !!process.env.OPENAI_API_KEY,
+      hasMongodbUri: false
     };
   }
 }
