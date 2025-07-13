@@ -38,7 +38,6 @@ export class MemStorage implements IStorage {
       website: insertBusiness.website || null,
       location: insertBusiness.location || null,
       distance: insertBusiness.distance || null,
-      isBadLead: insertBusiness.isBadLead || false,
       notes: insertBusiness.notes || null,
       isDuplicate: insertBusiness.isDuplicate || false,
       careerLink: insertBusiness.careerLink || null
@@ -81,7 +80,6 @@ export class MemStorage implements IStorage {
         website: csvBusiness.website || '',
         location: csvBusiness.location || '',
         distance: csvBusiness.distance || '',
-        isBadLead: csvBusiness.isBadLead || false,
         notes: csvBusiness.notes || '',
         isDuplicate: false,
         careerLink: csvBusiness.careerLink || ''

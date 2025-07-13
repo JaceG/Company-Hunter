@@ -515,21 +515,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const searchBusinesses = await storage.getBusinesses();
       
       console.log(`Found ${searchBusinesses.length} businesses in search results`);
-      console.log('Sample search businesses:', searchBusinesses.slice(0, 3).map(b => ({ name: b.name, isBadLead: b.isBadLead })));
+      console.log('Sample search businesses:', searchBusinesses.slice(0, 3).map(b => ({ name: b.name })));
       
       // Convert them to saved businesses format
-      const businessesToImport = searchBusinesses
-        .filter(b => !b.isBadLead) // Skip bad leads
-        .map(b => ({
-          name: b.name,
-          website: b.website || '',
-          location: b.location || '',
-          distance: b.distance || '',
-          isBadLead: false,
-          notes: b.notes || '',
-          careerLink: b.careerLink || '',
-          userId
-        }));
+      const businessesToImport = searchBusinesses.map(b => ({
+        name: b.name,
+        website: b.website || '',
+        location: b.location || '',
+        distance: b.distance || '',
+        notes: b.notes || '',
+        careerLink: b.careerLink || '',
+        userId
+      }));
       
       console.log(`After filtering, ${businessesToImport.length} businesses to import`);
       
@@ -538,7 +535,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No valid businesses to import" });
       }
       
-      const result = await importBusinessesForUser(userId, businessesToImport);
+      const result = await importBusinessesForUser(userId, businessesToImport, {
+        skipDuplicates: false, // Import all businesses, don't skip duplicates
+        replaceDuplicates: false
+      });
       
       console.log(`Import result: ${result.count} businesses imported`);
       
