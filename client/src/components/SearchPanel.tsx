@@ -249,25 +249,23 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
           <TabsContent value="single" className="space-y-4">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="jobRole">Job Role (for AI suggestions)</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="jobRole"
-                    value={jobRole}
-                    onChange={(e) => setJobRole(e.target.value)}
-                    placeholder="e.g., software engineer, marketing manager"
-                  />
-                  <Button 
-                    type="button"
-                    variant="outline" 
-                    onClick={() => handleGetSuggestions()}
-                    disabled={loadingSuggestions || !jobRole.trim() || !apiKeysStatus?.hasOpenaiKey}
-                    className="shrink-0"
-                  >
-                    <Sparkles className="w-4 h-4 mr-1" />
-                    {loadingSuggestions ? "Generating..." : "Get AI Suggestions"}
-                  </Button>
-                </div>
+                <Label htmlFor="jobRole">AI Suggestions</Label>
+                <Input
+                  id="jobRole"
+                  value={jobRole}
+                  onChange={(e) => setJobRole(e.target.value)}
+                  placeholder="e.g., software engineer, marketing manager"
+                />
+                <Button 
+                  type="button"
+                  variant="outline" 
+                  onClick={() => handleGetSuggestions()}
+                  disabled={loadingSuggestions || !jobRole.trim() || !apiKeysStatus?.hasOpenaiKey}
+                  className="w-full"
+                >
+                  <Sparkles className="w-4 h-4 mr-1" />
+                  {loadingSuggestions ? "Generating..." : "Get AI Suggestions"}
+                </Button>
               </div>
               
               <div className="space-y-2">
@@ -348,25 +346,23 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
           <TabsContent value="state" className="space-y-4">
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="state-job-role">Job Role (for AI suggestions)</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="state-job-role"
-                    value={jobRole}
-                    onChange={(e) => setJobRole(e.target.value)}
-                    placeholder="e.g., software engineer, marketing manager"
-                  />
-                  <Button 
-                    type="button"
-                    variant="outline" 
-                    onClick={() => handleGetSuggestions()}
-                    disabled={loadingSuggestions || !jobRole.trim() || !apiKeysStatus?.hasOpenaiKey}
-                    className="shrink-0"
-                  >
-                    <Sparkles className="w-4 h-4 mr-1" />
-                    {loadingSuggestions ? "Generating..." : "Get AI Suggestions"}
-                  </Button>
-                </div>
+                <Label htmlFor="state-job-role">AI Suggestions</Label>
+                <Input
+                  id="state-job-role"
+                  value={jobRole}
+                  onChange={(e) => setJobRole(e.target.value)}
+                  placeholder="e.g., software engineer, marketing manager"
+                />
+                <Button 
+                  type="button"
+                  variant="outline" 
+                  onClick={() => handleGetSuggestions()}
+                  disabled={loadingSuggestions || !jobRole.trim() || !apiKeysStatus?.hasOpenaiKey}
+                  className="w-full"
+                >
+                  <Sparkles className="w-4 h-4 mr-1" />
+                  {loadingSuggestions ? "Generating..." : "Get AI Suggestions"}
+                </Button>
               </div>
 
               <div className="space-y-2">
