@@ -803,8 +803,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           const requestBody = {
             textQuery: textQuery,
-            maxResultCount: 3, // Max 3 per city
-            includedType: "establishment"
+            maxResultCount: 3 // Max 3 per city
           };
           
           const placesResponse = await fetch(`${GOOGLE_PLACES_API_URL}:searchText`, {
@@ -940,8 +939,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         do {
           const requestBody = {
             textQuery: textQuery,
-            maxResultCount: Math.min(20, maxResultsNum - businesses.length),
-            includedType: "establishment"
+            maxResultCount: Math.min(20, maxResultsNum - businesses.length)
           };
           
           if (nextPageToken) {
@@ -1402,8 +1400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Search for businesses using new Places API
               const requestBody = {
                 textQuery: `${businessType} in ${city}, ${state}`,
-                maxResultCount: 20,
-                includedType: "establishment"
+                maxResultCount: 20
               };
               
               const placesResponse = await fetch(`${GOOGLE_PLACES_API_URL}:searchText`, {
