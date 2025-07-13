@@ -19,13 +19,13 @@ export default function ResultsTable({ businesses, isLoading }: ResultsTableProp
   const [businessesWithDuplicateFlags, setBusinessesWithDuplicateFlags] = useState<(Business & { isDuplicate?: boolean })[]>([]);
   const itemsPerPage = 10;
   const updateBusiness = useUpdateBusiness();
-  const { data: savedBusinesses, isLoading: isSavedBusinessesLoading } = useSavedBusinesses();
+  const { data: savedBusinessesData, isLoading: isSavedBusinessesLoading } = useSavedBusinesses();
   
   // Function to check if a business is a duplicate in saved businesses
   const checkForDuplicates = (business: Business) => {
-    if (!savedBusinesses || savedBusinesses.length === 0) return false;
+    if (!savedBusinessesData?.businesses || savedBusinessesData.businesses.length === 0) return false;
     
-    return savedBusinesses.some((savedBusiness: any) => {
+    return savedBusinessesData.businesses.some((savedBusiness: any) => {
       // Check for website match (normalize domain)
       if (business.website && savedBusiness.website) {
         const normalizeUrl = (url: string) => {
@@ -69,7 +69,7 @@ export default function ResultsTable({ businesses, isLoading }: ResultsTableProp
     }));
     
     setBusinessesWithDuplicateFlags(markedBusinesses);
-  }, [businesses, savedBusinesses]);
+  }, [businesses, savedBusinessesData]);
   
   // Calculate pagination
   const totalPages = Math.ceil((businessesWithDuplicateFlags.length || businesses.length) / itemsPerPage);
