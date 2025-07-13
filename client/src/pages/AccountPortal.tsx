@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import ApiKeySetup from "@/components/ApiKeySetup";
 import { useApiKeys } from "@/hooks/useApiKeys";
 import { useToast } from "@/hooks/use-toast";
+import { queryClient } from "@/lib/queryClient";
 
 export default function AccountPortal() {
   const { user, isLoading: isAuthLoading, isAuthenticated } = useAuth();
@@ -484,6 +485,28 @@ export default function AccountPortal() {
                       </div>
                     </DialogContent>
                   </Dialog>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      // Clear React Query cache and force refresh from database
+                      queryClient.invalidateQueries({ queryKey: ["/api/my/businesses"] });
+                      queryClient.refetchQueries({ queryKey: ["/api/my/businesses"] });
+                      setCurrentPage(1); // Reset to first page
+                      
+                      toast({
+                        title: "Companies Refreshed",
+                        description: "Data has been refreshed from the database",
+                      });
+                    }}
+                  >
+                    <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 4v6h-6"></path>
+                      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                    </svg>
+                    Refresh from Database
+                  </Button>
                 </div>
                 
                 <div className="text-sm text-muted-foreground">
