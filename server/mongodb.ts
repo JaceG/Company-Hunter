@@ -721,7 +721,7 @@ export async function getApiKeysStatus(userId: string): Promise<{hasGooglePlaces
     // Check if API keys are available (either user-provided or server environment)
     const hasGooglePlacesKey = !!(userApiKeys?.googlePlacesApiKey || process.env.GOOGLE_PLACES_API_KEY);
     const hasOpenaiKey = !!(userApiKeys?.openaiApiKey || process.env.OPENAI_API_KEY);
-    const hasMongodbUri = !!(userApiKeys?.mongodbUri);
+    const hasMongodbUri = !!(userApiKeys?.mongodbUri || process.env.MONGODB_URI || process.env.DATABASE_URL);
     
     return {
       hasGooglePlacesKey,
@@ -735,7 +735,7 @@ export async function getApiKeysStatus(userId: string): Promise<{hasGooglePlaces
     return {
       hasGooglePlacesKey: !!process.env.GOOGLE_PLACES_API_KEY,
       hasOpenaiKey: !!process.env.OPENAI_API_KEY,
-      hasMongodbUri: false
+      hasMongodbUri: !!(process.env.MONGODB_URI || process.env.DATABASE_URL)
     };
   }
 }

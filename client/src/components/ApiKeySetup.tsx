@@ -129,7 +129,7 @@ export default function ApiKeySetup() {
                   <div>
                     <p className="font-medium">MongoDB Atlas</p>
                     <p className="text-sm text-gray-600">
-                      {apiKeysStatus?.hasMongodbUri ? "Custom URI configured" : "Using environment variable"}
+                      {apiKeysStatus?.hasMongodbUri ? "Configured" : "Not configured"}
                     </p>
                   </div>
                 </div>
