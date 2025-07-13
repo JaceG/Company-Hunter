@@ -509,8 +509,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user!.userId;
       
+      console.log(`Import request from user: ${userId}`);
+      
       // Get the businesses from the search results
       const searchBusinesses = await storage.getBusinesses();
+      
+      console.log(`Found ${searchBusinesses.length} businesses in search results`);
+      console.log('Sample search businesses:', searchBusinesses.slice(0, 3).map(b => ({ name: b.name, isBadLead: b.isBadLead })));
       
       // Convert them to saved businesses format
       const businessesToImport = searchBusinesses
@@ -526,11 +531,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId
         }));
       
+      console.log(`After filtering, ${businessesToImport.length} businesses to import`);
+      
       if (businessesToImport.length === 0) {
+        console.log('No businesses to import - all may be marked as bad leads');
         return res.status(400).json({ message: "No valid businesses to import" });
       }
       
       const result = await importBusinessesForUser(userId, businessesToImport);
+      
+      console.log(`Import result: ${result.count} businesses imported`);
       
       res.status(201).json({ 
         message: `Successfully imported ${result.count} businesses`,
