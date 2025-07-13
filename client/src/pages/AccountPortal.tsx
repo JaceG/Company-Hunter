@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth, useLogout } from "../hooks/useAuth";
 import { useSavedBusinesses, useUpdateSavedBusiness, useDeleteSavedBusiness, useImportFromSearch, useImportFromCSV, useClearAllSavedBusinesses, SavedBusiness } from "../hooks/useSavedBusinesses";
@@ -15,6 +15,7 @@ import { Loader2, FileUp, Download, AlertCircle, Trash2, Key, Settings } from "l
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import ApiKeySetup from "@/components/ApiKeySetup";
 import { useApiKeys } from "@/hooks/useApiKeys";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AccountPortal() {
   const { user, isLoading: isAuthLoading, isAuthenticated } = useAuth();
@@ -29,6 +30,8 @@ export default function AccountPortal() {
   const clearAllBusinessesMutation = useClearAllSavedBusinesses();
   const logout = useLogout();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [searchTerm, setSearchTerm] = useState("");
   const [filterRecentOnly, setFilterRecentOnly] = useState(false);
@@ -206,6 +209,62 @@ export default function AccountPortal() {
       downloadCSV(csvContent, "master_business_list.csv");
     }
   };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && file.type === "text/csv") {
+      setSelectedFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target?.result as string;
+        setCsvContent(content);
+      };
+      reader.readAsText(file);
+    } else {
+      toast({
+        title: "Invalid File",
+        description: "Please select a valid CSV file.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleImportCSV = async () => {
+    if (!csvContent) {
+      toast({
+        title: "No File Selected",
+        description: "Please select a CSV file to import.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await importFromCSVMutation.mutateAsync({
+        csvData: csvContent,
+        skipDuplicates,
+        replaceDuplicates
+      });
+      
+      toast({
+        title: "Import Successful",
+        description: "Your CSV file has been imported successfully.",
+      });
+      
+      // Reset form
+      setSelectedFile(null);
+      setCsvContent("");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } catch (error) {
+      toast({
+        title: "Import Failed",
+        description: "Failed to import CSV file. Please check the format and try again.",
+        variant: "destructive",
+      });
+    }
+  };
   
   if (isAuthLoading) {
     return <div className="flex items-center justify-center min-h-screen">
@@ -344,6 +403,87 @@ export default function AccountPortal() {
                     <Download className="w-4 h-4 mr-2" />
                     Export CSV
                   </Button>
+                  
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <FileUp className="w-4 h-4 mr-2" />
+                        Import CSV
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Import Companies from CSV</DialogTitle>
+                        <DialogDescription>
+                          Upload a CSV file to add companies to your saved list. Missing companies from old exports can be restored this way.
+                        </DialogDescription>
+                      </DialogHeader>
+                      
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="csv-file">Select CSV File</Label>
+                          <Input
+                            id="csv-file"
+                            type="file"
+                            accept=".csv"
+                            ref={fileInputRef}
+                            onChange={handleFileSelect}
+                            className="mt-1"
+                          />
+                          {selectedFile && (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Selected: {selectedFile.name}
+                            </p>
+                          )}
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <Checkbox 
+                              id="skip-duplicates" 
+                              checked={skipDuplicates}
+                              onCheckedChange={(checked) => setSkipDuplicates(checked === true)}
+                            />
+                            <Label htmlFor="skip-duplicates">Skip duplicates</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Checkbox 
+                              id="replace-duplicates" 
+                              checked={replaceDuplicates}
+                              onCheckedChange={(checked) => setReplaceDuplicates(checked === true)}
+                            />
+                            <Label htmlFor="replace-duplicates">Replace duplicates</Label>
+                          </div>
+                        </div>
+                        
+                        <div className="flex gap-2 pt-4">
+                          <Button 
+                            onClick={handleImportCSV}
+                            disabled={!selectedFile || importFromCSVMutation.isPending}
+                            className="flex-1"
+                          >
+                            {importFromCSVMutation.isPending ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Importing...
+                              </>
+                            ) : (
+                              <>
+                                <FileUp className="w-4 h-4 mr-2" />
+                                Import CSV
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                        
+                        <div className="text-xs text-muted-foreground">
+                          <p><strong>Expected CSV format:</strong></p>
+                          <p>name, website, location, notes</p>
+                          <p>Company A, company-a.com, City State, Optional notes</p>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 </div>
                 
                 <div className="text-sm text-muted-foreground">
