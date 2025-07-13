@@ -222,7 +222,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 
     try {
       setLoadingCities(true);
-      const result = await stateCities.mutateAsync({ state, maxCities: 20 });
+      const result = await stateCities.mutateAsync({ state, maxCities: 100 });
       setAvailableCities(result.cities || []);
       setSelectedCities([]);
       setShowCities(true);
@@ -476,7 +476,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
                       {selectedCities.length}/5 selected
                     </span>
                   </div>
-                  <div className="max-h-48 overflow-y-auto border rounded-md p-3 space-y-2">
+                  <div className="max-h-64 overflow-y-auto border rounded-md p-3 space-y-2">
                     {availableCities.map((city) => (
                       <div key={city} className="flex items-center space-x-2">
                         <Checkbox

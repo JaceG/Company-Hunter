@@ -131,7 +131,7 @@ async function getOhioCities(): Promise<string[]> {
 const stateCitiesCache = new Map<string, { cities: string[], timestamp: number }>();
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
-async function getTopCitiesForState(state: string, maxCities: number = 5): Promise<string[]> {
+async function getTopCitiesForState(state: string, maxCities: number = 100): Promise<string[]> {
   // Check cache first (24-hour cache to reduce OpenAI API calls)
   const cacheKey = `${state}-${maxCities}`;
   const cached = stateCitiesCache.get(cacheKey);
@@ -141,7 +141,7 @@ async function getTopCitiesForState(state: string, maxCities: number = 5): Promi
   }
   
   try {
-    // Generate cities dynamically using OpenAI with controlled limits
+    // Generate cities dynamically using OpenAI - now supports up to 100 cities
     const response = await openai.chat.completions.create({
       model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
       messages: [
@@ -151,7 +151,7 @@ async function getTopCitiesForState(state: string, maxCities: number = 5): Promi
         },
         {
           role: "user",
-          content: `Provide exactly ${Math.min(maxCities, 10)} top cities in ${state} by population. Include major cities, business centers, and metropolitan areas. Return JSON in this exact format: {"cities": ["City1", "City2", "City3"]}`
+          content: `Provide the top ${maxCities} cities and towns in ${state} by population and business activity. Include major cities, business centers, metropolitan areas, suburbs, and smaller business-active towns. Return JSON in this exact format: {"cities": ["City1", "City2", "City3"]} with exactly ${maxCities} cities.`
         }
       ],
       response_format: { type: "json_object" },
@@ -171,15 +171,15 @@ async function getTopCitiesForState(state: string, maxCities: number = 5): Promi
   } catch (error) {
     console.error(`Error generating cities for ${state}:`, error);
     
-    // Fallback to basic major cities if OpenAI fails
+    // Expanded fallback cities for better coverage
     const fallbackCities: Record<string, string[]> = {
-      "California": ["Los Angeles", "San Diego", "San Jose", "San Francisco", "Sacramento"],
-      "Texas": ["Houston", "San Antonio", "Dallas", "Austin", "Fort Worth"],
-      "Florida": ["Jacksonville", "Miami", "Tampa", "Orlando", "St. Petersburg"],
-      "New York": ["New York City", "Buffalo", "Rochester", "Syracuse", "Albany"],
-      "Pennsylvania": ["Philadelphia", "Pittsburgh", "Allentown", "Erie", "Reading"],
-      "Illinois": ["Chicago", "Aurora", "Rockford", "Joliet", "Naperville"],
-      "Ohio": ["Columbus", "Cleveland", "Cincinnati", "Toledo", "Akron"]
+      "California": ["Los Angeles", "San Diego", "San Jose", "San Francisco", "Sacramento", "Long Beach", "Oakland", "Bakersfield", "Fresno", "Santa Ana", "Anaheim", "Stockton", "Riverside", "Chula Vista", "Irvine", "Fremont", "San Bernardino", "Modesto", "Fontana", "Oxnard"],
+      "Texas": ["Houston", "San Antonio", "Dallas", "Austin", "Fort Worth", "El Paso", "Arlington", "Corpus Christi", "Plano", "Lubbock", "Laredo", "Irving", "Garland", "Frisco", "McKinney", "Grand Prairie", "Amarillo", "Brownsville", "Pasadena", "Mesquite"],
+      "Florida": ["Jacksonville", "Miami", "Tampa", "Orlando", "St. Petersburg", "Hialeah", "Tallahassee", "Fort Lauderdale", "Port St. Lucie", "Cape Coral", "Pembroke Pines", "Hollywood", "Miramar", "Gainesville", "Coral Springs", "Miami Gardens", "Clearwater", "Palm Bay", "West Palm Beach", "Pompano Beach"],
+      "New York": ["New York City", "Buffalo", "Rochester", "Syracuse", "Albany", "Yonkers", "New Rochelle", "Mount Vernon", "Schenectady", "Utica", "White Plains", "Troy", "Niagara Falls", "Binghamton", "Freeport", "Valley Stream", "Long Beach", "Rome", "Watertown", "Ithaca"],
+      "Pennsylvania": ["Philadelphia", "Pittsburgh", "Allentown", "Erie", "Reading", "Scranton", "Bethlehem", "Lancaster", "Harrisburg", "Altoona", "York", "State College", "Wilkes-Barre", "Chester", "Norristown", "Camden", "Williamsport", "Johnstown", "Easton", "McKeesport"],
+      "Illinois": ["Chicago", "Aurora", "Rockford", "Joliet", "Naperville", "Springfield", "Peoria", "Elgin", "Waukegan", "Cicero", "Champaign", "Bloomington", "Arlington Heights", "Evanston", "Decatur", "Schaumburg", "Bolingbrook", "Palatine", "Skokie", "Des Plaines"],
+      "Ohio": ["Columbus", "Cleveland", "Cincinnati", "Toledo", "Akron", "Dayton", "Parma", "Canton", "Youngstown", "Lorain", "Hamilton", "Springfield", "Kettering", "Elyria", "Lakewood", "Cuyahoga Falls", "Middletown", "Euclid", "Newark", "Mansfield"]
     };
     
     return fallbackCities[state]?.slice(0, maxCities) || [];
@@ -1227,7 +1227,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get available cities for a specific state
   app.post("/api/businesses/state-cities", optionalAuth, async (req, res) => {
     try {
-      const { state, maxCities = 5 } = req.body;
+      const { state, maxCities = 100 } = req.body;
       
       if (!state) {
         return res.status(400).json({ message: "State is required" });
@@ -1248,9 +1248,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Limit cities to prevent API violations - max 5 cities can be generated
-      const limitedMaxCities = Math.min(maxCities, 5);
-      const cities = await getTopCitiesForState(state, limitedMaxCities);
+      // Generate up to 100 cities for selection (users can choose up to 5 for actual search)
+      const cities = await getTopCitiesForState(state, maxCities);
       
       res.json({
         cities,
