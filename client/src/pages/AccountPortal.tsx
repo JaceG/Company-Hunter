@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth, useLogout } from "../hooks/useAuth";
-import { useSavedBusinesses, useUpdateSavedBusiness, useDeleteSavedBusiness, useImportFromSearch, useImportFromCSV, useClearAllSavedBusinesses, useSearchSavedBusinesses, SavedBusiness } from "../hooks/useSavedBusinesses";
+import { useSavedBusinesses, useUpdateSavedBusiness, useDeleteSavedBusiness, useImportFromSearch, useImportFromCSV, useClearAllSavedBusinesses, SavedBusiness } from "../hooks/useSavedBusinesses";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
@@ -17,35 +17,10 @@ import ApiKeySetup from "@/components/ApiKeySetup";
 import { useApiKeys } from "@/hooks/useApiKeys";
 import { useToast } from "@/hooks/use-toast";
 
-// Simple component to display search results
-function SearchResults({ query }: { query: string }) {
-  const { data: searchResults, isLoading } = useSearchSavedBusinesses(query);
-  
-  if (!query.trim()) return null;
-  
-  if (isLoading) {
-    return <div className="text-sm text-muted-foreground">Searching...</div>;
-  }
-  
-  return (
-    <div className="text-sm">
-      {searchResults?.businesses?.length ? (
-        <div className="text-green-600">
-          Found {searchResults.businesses.length} companies matching "{query}"
-        </div>
-      ) : (
-        <div className="text-red-600">
-          No companies found matching "{query}"
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function AccountPortal() {
   const { user, isLoading: isAuthLoading, isAuthenticated } = useAuth();
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(200); // Increased from 50 to catch more companies
+  const [pageSize] = useState(50);
   const { data: savedBusinessesData, isLoading: isBusinessesLoading, error } = useSavedBusinesses(currentPage, pageSize);
   const { data: apiKeysStatus } = useApiKeys();
   const updateBusinessMutation = useUpdateSavedBusiness();
@@ -75,7 +50,6 @@ export default function AccountPortal() {
   const [showDuplicatesDialog, setShowDuplicatesDialog] = useState<boolean>(false);
   const [cleanupResults, setCleanupResults] = useState<{fixed: number, issues: string[]}>({fixed: 0, issues: []});
   const [showCleanupDialog, setShowCleanupDialog] = useState<boolean>(false);
-  const [debugSearchQuery, setDebugSearchQuery] = useState('');
   
   useEffect(() => {
     // Redirect to home if not authenticated
@@ -510,21 +484,6 @@ export default function AccountPortal() {
                       </div>
                     </DialogContent>
                   </Dialog>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <Input
-                    placeholder="Search companies (e.g., FYVE, 6IXTH CITY)..."
-                    value={debugSearchQuery}
-                    onChange={(e) => setDebugSearchQuery(e.target.value)}
-                    className="w-64"
-                  />
-                  {debugSearchQuery && <SearchResults query={debugSearchQuery} />}
-                </div>
-                
-                <div className="text-xs text-muted-foreground">
-                  <p>Companies are sorted by date added (newest first). Missing companies might be on later pages.</p>
-                  <p>Use the search box above to find specific companies across all pages.</p>
                 </div>
                 
                 <div className="text-sm text-muted-foreground">

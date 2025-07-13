@@ -12,7 +12,7 @@ export interface SavedBusiness extends Omit<Business, 'id'> {
 }
 
 // Get all saved businesses for the current user with pagination
-export function useSavedBusinesses(page: number = 1, limit: number = 200) {
+export function useSavedBusinesses(page: number = 1, limit: number = 50) {
   return useQuery({
     queryKey: ["/api/my/businesses", page, limit],
     queryFn: async () => {

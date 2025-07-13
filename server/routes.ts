@@ -394,14 +394,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user!.userId;
       const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 200; // Increased default from 50 to 200
-      
-      console.log(`API call: /api/my/businesses - User: ${userId}, Page: ${page}, Limit: ${limit}`);
+      const limit = parseInt(req.query.limit as string) || 50;
       
       const result = await getSavedBusinesses(userId, page, limit);
-      
-      console.log(`Returning ${result.businesses.length} businesses out of ${result.total} total for page ${page}`);
-      
       res.json(result);
     } catch (error) {
       console.error("Error fetching saved businesses:", error);
