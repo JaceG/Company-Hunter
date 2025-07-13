@@ -27,7 +27,7 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
   const [hideDuplicates, setHideDuplicates] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importFromSearch = useImportFromSearch();
-  const { data: savedBusinessesData } = useSavedBusinesses();
+  const { data: savedBusinessesData } = useSavedBusinesses(1, 5000); // Load more businesses for duplicate detection
   const clearAllBusinesses = useClearAllBusinesses();
   
   // Check for duplicates against saved businesses
@@ -71,10 +71,11 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
       return false;
     }) || false;
     
-    if (business.name === "FYVE Marketing") {
-      console.log(`FYVE Marketing duplicate check result: ${isDuplicate}`, {
+    if (business.name && business.name.toLowerCase().includes("fyve")) {
+      console.log(`FYVE business duplicate check result: ${business.name} -> ${isDuplicate}`, {
         searchBusiness: business,
-        savedBusinessesCount: savedBusinessesData?.businesses?.length || 0
+        savedBusinessesCount: savedBusinessesData?.businesses?.length || 0,
+        totalSavedBusinesses: savedBusinessesData?.total || 0
       });
     }
     
