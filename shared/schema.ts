@@ -105,3 +105,26 @@ export const importBusinessSchema = z.object({
 });
 
 export type ImportBusiness = z.infer<typeof importBusinessSchema>;
+
+// API Keys management for multi-user support
+export const apiKeysSchema = z.object({
+  userId: z.string(),
+  googlePlacesApiKey: z.string().optional(),
+  openaiApiKey: z.string().optional(),
+  createdAt: z.date().optional(),
+  updatedAt: z.date().optional()
+});
+
+export type ApiKeys = z.infer<typeof apiKeysSchema> & {
+  _id?: string;
+};
+
+// State-based search parameters
+export const stateSearchParamsSchema = z.object({
+  businessType: z.string().min(1, "Business type is required"),
+  state: z.string().min(2, "State is required"),
+  maxCities: z.number().min(1).max(100).default(100),
+  maxResults: z.string().or(z.number()),
+});
+
+export type StateSearchParams = z.infer<typeof stateSearchParamsSchema>;

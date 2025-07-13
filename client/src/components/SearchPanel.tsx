@@ -1,19 +1,33 @@
 import { useState } from "react";
 import { 
   Card, 
-  CardContent 
+  CardContent,
+  CardHeader,
+  CardTitle 
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SearchParams } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
+import { useStateSearch, useStateCities } from "@/hooks/useStateSearch";
+import { useApiKeys } from "@/hooks/useApiKeys";
+import { MapPin, Key, Sparkles, AlertCircle } from "lucide-react";
 
 interface SearchPanelProps {
   onSearch: (params: SearchParams) => void;
   isLoading: boolean;
+}
+
+interface StateSearchParams {
+  businessType: string;
+  state: string;
+  maxCities: number;
+  maxResults: number;
 }
 
 export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
@@ -25,7 +39,21 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
     maxResults: "100"
   });
   
-  const [searchEntireState, setSearchEntireState] = useState(false);
+  const [stateParams, setStateParams] = useState<StateSearchParams>({
+    businessType: "",
+    state: "Ohio",
+    maxCities: 100,
+    maxResults: 200
+  });
+  
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [availableCities, setAvailableCities] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  
+  const { data: apiKeysStatus } = useApiKeys();
+  const stateSearch = useStateSearch();
+  const stateCities = useStateCities();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
@@ -34,6 +62,10 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 
   const handleSelectChange = (value: string, name: string) => {
     setSearchParams(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleStateInputChange = (field: keyof StateSearchParams, value: string | number) => {
+    setStateParams(prev => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -48,27 +80,61 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
       return;
     }
     
-    if (!searchParams.location.trim() && !searchEntireState) {
+    if (!searchParams.location.trim()) {
       toast({
-        title: "Location is required",
-        description: "Please enter a location or select state-wide search",
+        title: "Location is required", 
+        description: "Please enter a location to search",
         variant: "destructive"
       });
       return;
     }
     
-    // Modify search parameters for state-wide search
-    const finalSearchParams = searchEntireState 
-      ? { ...searchParams, location: "Ohio, USA", radius: "0" }
-      : searchParams;
-    
-    onSearch(finalSearchParams);
+    onSearch(searchParams);
   };
 
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [availableCities, setAvailableCities] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const handleStateSearch = async () => {
+    if (!stateParams.businessType.trim()) {
+      toast({
+        title: "Business type is required",
+        description: "Please enter a business type to search for",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!apiKeysStatus?.hasGooglePlacesKey) {
+      toast({
+        title: "Google Places API key required",
+        description: "Please set up your API keys first",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const result = await stateSearch.mutateAsync(stateParams);
+      
+      toast({
+        title: "State search completed",
+        description: `Found ${result.total} businesses across ${result.searchedCities} cities`,
+      });
+      
+      // Convert state search result to regular search format for display
+      onSearch({
+        businessType: stateParams.businessType,
+        location: `${stateParams.state} (${result.searchedCities} cities)`,
+        radius: "statewide",
+        maxResults: result.total.toString()
+      });
+    } catch (error) {
+      console.error("State search error:", error);
+      toast({
+        title: "Search failed",
+        description: "Failed to search state. Please check your API keys and try again.",
+        variant: "destructive"
+      });
+    }
+  };
 
   const handleGetSuggestions = async () => {
     if (!searchParams.businessType.trim()) {
@@ -97,21 +163,19 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
       }
       
       const data = await response.json();
-      
       setSuggestions(data.suggestions || []);
       setAvailableCities(data.availableCities || []);
       setShowSuggestions(true);
       
       toast({
-        title: "Search Suggestions Generated",
-        description: `Found ${data.suggestions?.length || 0} search term suggestions for ${searchParams.businessType}`,
-        duration: 5000
+        title: "Suggestions generated",
+        description: `Generated ${data.suggestions?.length || 0} search terms for ${data.availableCities?.length || 0} cities`,
       });
-      
     } catch (error) {
+      console.error('Error getting suggestions:', error);
       toast({
-        title: "Failed to Get Suggestions",
-        description: error instanceof Error ? error.message : "Failed to generate search suggestions",
+        title: "Failed to generate suggestions",
+        description: "Please check your OpenAI API key setup",
         variant: "destructive"
       });
     } finally {
@@ -119,201 +183,269 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
     }
   };
 
+  const getCitiesForState = async (state: string) => {
+    try {
+      const result = await stateCities.mutateAsync({ state, maxCities: 100 });
+      toast({
+        title: "Cities loaded",
+        description: `Found ${result.count} cities in ${state}. Estimated cost: ${result.estimatedCost.total}`,
+      });
+    } catch (error) {
+      console.error("Error getting cities:", error);
+      toast({
+        title: "Failed to load cities",
+        description: "Please check your API key setup",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const US_STATES = [
+    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", 
+    "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", 
+    "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", 
+    "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire", 
+    "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota", "Ohio", 
+    "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota", 
+    "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia", 
+    "Wisconsin", "Wyoming"
+  ];
+
   return (
-    <div className="lg:col-span-4 space-y-6">
-      <Card>
-        <CardContent className="p-6">
-          <h2 className="text-lg font-semibold mb-4 flex items-center text-[#0c0a09]">
-            <svg className="w-5 h-5 mr-2 text-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-              <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-            </svg>
-            Find Companies That Would Hire You
-          </h2>
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MapPin className="h-5 w-5" />
+          Business Search
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {!apiKeysStatus?.hasGooglePlacesKey && (
+          <Alert className="mb-4">
+            <Key className="h-4 w-4" />
+            <AlertDescription>
+              Google Places API key required for searching. Please set up your API keys in Account Portal.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <Tabs defaultValue="single" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="single">Single Location</TabsTrigger>
+            <TabsTrigger value="state">State Search</TabsTrigger>
+            <TabsTrigger value="suggestions">AI Suggestions</TabsTrigger>
+          </TabsList>
           
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <div>
-              <Label htmlFor="businessType" className="text-sm font-medium mb-1 text-[#0c0a09]">Your Job Role</Label>
-              <Input
-                id="businessType"
-                placeholder="e.g., Web Developer, Graphic Designer, Marketing Manager, Accountant"
-                value={searchParams.businessType}
-                onChange={handleInputChange}
-                required
-              />
-              <p className="mt-1 text-xs text-gray-500">Enter your job role to find companies that would hire you</p>
-            </div>
-            
-            <div>
-              <Label htmlFor="location" className="text-sm font-medium mb-1 text-[#0c0a09]">Location</Label>
-              <Input
-                id="location"
-                placeholder="Columbus, OH"
-                value={searchParams.location}
-                onChange={handleInputChange}
-                required={!searchEntireState}
-                disabled={searchEntireState}
-              />
-              <div className="mt-2 flex items-center space-x-2">
-                <Checkbox 
-                  id="search-entire-state" 
-                  checked={searchEntireState}
-                  onCheckedChange={(checked) => setSearchEntireState(checked === true)}
+          <TabsContent value="single" className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="businessType">Business Type / Job Role</Label>
+                <Input
+                  id="businessType"
+                  value={searchParams.businessType}
+                  onChange={handleInputChange}
+                  placeholder="e.g., software engineer, marketing manager, dentist"
                 />
-                <Label htmlFor="search-entire-state" className="text-sm">
-                  Search entire state of Ohio (ignores location and radius)
-                </Label>
               </div>
-              {!searchEntireState && (
-                <p className="mt-1 text-xs text-gray-500">City, state, or address</p>
-              )}
-            </div>
-            
-            <div>
-              <Label htmlFor="radius" className="text-sm font-medium mb-1 text-[#0c0a09]">Search Radius (miles)</Label>
-              <Select
-                value={searchParams.radius}
-                onValueChange={(value) => handleSelectChange(value, "radius")}
-                disabled={searchEntireState}
-              >
-                <SelectTrigger id="radius">
-                  <SelectValue placeholder={searchEntireState ? "Not applicable for state-wide search" : "Search radius"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="5">5 miles</SelectItem>
-                  <SelectItem value="10">10 miles</SelectItem>
-                  <SelectItem value="15">15 miles</SelectItem>
-                  <SelectItem value="20">20 miles</SelectItem>
-                  <SelectItem value="50">50 miles</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <Label htmlFor="maxResults" className="text-sm font-medium mb-1 text-[#0c0a09]">Max Results</Label>
-              <Select
-                value={searchParams.maxResults}
-                onValueChange={(value) => handleSelectChange(value, "maxResults")}
-              >
-                <SelectTrigger id="maxResults">
-                  <SelectValue placeholder="Max results" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="20">20 results</SelectItem>
-                  <SelectItem value="50">50 results</SelectItem>
-                  <SelectItem value="100">100 results</SelectItem>
-                  <SelectItem value="200">200 results</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="pt-2 space-y-2">
-              <Button 
-                type="submit" 
-                className="w-full bg-primary text-white" 
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <div className="flex items-center">
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Searching...
-                  </div>
-                ) : (
-                  <div className="flex items-center">
-                    <svg className="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="11" cy="11" r="8"></circle>
-                      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                    Quick Search
-                  </div>
-                )}
-              </Button>
               
-              <Button 
-                type="button"
-                variant="outline"
-                className="w-full border-purple-500 text-purple-700 hover:bg-purple-50" 
-                disabled={isLoading || !searchParams.businessType.trim() || loadingSuggestions}
-                onClick={() => handleGetSuggestions()}
-              >
-                <div className="flex items-center">
-                  <svg className="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-                  </svg>
-                  {loadingSuggestions ? "Getting Suggestions..." : "💡 Get Smart Search Suggestions"}
+              <div className="space-y-2">
+                <Label htmlFor="location">Location</Label>
+                <Input
+                  id="location"
+                  value={searchParams.location}
+                  onChange={handleInputChange}
+                  placeholder="e.g., Columbus, OH"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="radius">Search Radius</Label>
+                  <Select value={searchParams.radius} onValueChange={(value) => handleSelectChange(value, 'radius')}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 miles</SelectItem>
+                      <SelectItem value="10">10 miles</SelectItem>
+                      <SelectItem value="20">20 miles</SelectItem>
+                      <SelectItem value="50">50 miles</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              </Button>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="maxResults">Max Results</Label>
+                  <Select value={searchParams.maxResults} onValueChange={(value) => handleSelectChange(value, 'maxResults')}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="20">20 results</SelectItem>
+                      <SelectItem value="50">50 results</SelectItem>
+                      <SelectItem value="100">100 results</SelectItem>
+                      <SelectItem value="200">200 results</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               
-              <p className="text-xs text-gray-500 text-center">
-                Get AI-powered search suggestions instead of automatic comprehensive searches
-              </p>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-      
-      {/* Search Suggestions Display */}
-      {showSuggestions && (
-        <Card>
-          <CardContent className="p-6">
-            <h3 className="text-lg font-semibold mb-4 text-[#0c0a09]">
-              💡 Search Suggestions for "{searchParams.businessType}"
-            </h3>
-            
+              <Button type="submit" disabled={isLoading || !apiKeysStatus?.hasGooglePlacesKey} className="w-full">
+                {isLoading ? "Searching..." : "Search Businesses"}
+              </Button>
+            </form>
+          </TabsContent>
+          
+          <TabsContent value="state" className="space-y-4">
             <div className="space-y-4">
-              <div>
-                <h4 className="font-medium text-sm mb-2 text-[#0c0a09]">Suggested Search Terms:</h4>
-                <div className="flex flex-wrap gap-2">
-                  {suggestions.map((suggestion, index) => (
-                    <Button
-                      key={index}
-                      variant="outline"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => {
-                        setSearchParams(prev => ({ ...prev, businessType: suggestion }));
-                        setShowSuggestions(false);
-                      }}
-                    >
-                      {suggestion}
-                    </Button>
-                  ))}
+              <div className="space-y-2">
+                <Label htmlFor="state-business-type">Business Type / Job Role</Label>
+                <Input
+                  id="state-business-type"
+                  value={stateParams.businessType}
+                  onChange={(e) => handleStateInputChange('businessType', e.target.value)}
+                  placeholder="e.g., software engineer, marketing manager, dentist"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="state">State</Label>
+                <Select value={stateParams.state} onValueChange={(value) => handleStateInputChange('state', value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {US_STATES.map((state) => (
+                      <SelectItem key={state} value={state}>{state}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="max-cities">Max Cities</Label>
+                  <Select 
+                    value={stateParams.maxCities.toString()} 
+                    onValueChange={(value) => handleStateInputChange('maxCities', parseInt(value))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="25">Top 25 cities</SelectItem>
+                      <SelectItem value="50">Top 50 cities</SelectItem>
+                      <SelectItem value="100">Top 100 cities</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="state-max-results">Max Results</Label>
+                  <Select 
+                    value={stateParams.maxResults.toString()} 
+                    onValueChange={(value) => handleStateInputChange('maxResults', parseInt(value))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="100">100 results</SelectItem>
+                      <SelectItem value="200">200 results</SelectItem>
+                      <SelectItem value="500">500 results</SelectItem>
+                      <SelectItem value="1000">1000 results</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
+
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Estimated cost: ${(stateParams.maxCities * 0.049).toFixed(2)} for {stateParams.maxCities} cities
+                </AlertDescription>
+              </Alert>
               
-              <div>
-                <h4 className="font-medium text-sm mb-2 text-[#0c0a09]">Available Cities ({availableCities.length} locations):</h4>
-                <p className="text-xs text-gray-600">
-                  {availableCities.slice(0, 10).join(", ")}
-                  {availableCities.length > 10 && ` and ${availableCities.length - 10} more...`}
-                </p>
-              </div>
-              
-              <div className="bg-blue-50 p-3 rounded-lg">
-                <h4 className="font-medium text-sm mb-1 text-blue-800">Cost-Effective Searching:</h4>
-                <ul className="text-xs text-blue-700 space-y-1">
-                  <li>• Use individual search terms instead of comprehensive searches</li>
-                  <li>• Each search costs ~$0.049 per location (Text Search + Details)</li>
-                  <li>• Caching prevents repeated API calls for same businesses</li>
-                  <li>• Focus on specific cities to control costs</li>
-                </ul>
-              </div>
-              
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowSuggestions(false)}
+              <Button 
+                onClick={handleStateSearch}
+                disabled={stateSearch.isPending || !apiKeysStatus?.hasGooglePlacesKey} 
                 className="w-full"
               >
-                Close Suggestions
+                {stateSearch.isPending ? "Searching State..." : `Search ${stateParams.state}`}
+              </Button>
+              
+              <Button 
+                variant="outline"
+                onClick={() => getCitiesForState(stateParams.state)}
+                disabled={stateCities.isPending}
+                className="w-full"
+              >
+                {stateCities.isPending ? "Loading..." : `Preview Cities for ${stateParams.state}`}
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+          </TabsContent>
+          
+          <TabsContent value="suggestions" className="space-y-4">
+            {!apiKeysStatus?.hasOpenaiKey && (
+              <Alert>
+                <Key className="h-4 w-4" />
+                <AlertDescription>
+                  OpenAI API key required for AI suggestions. Please set up your API keys.
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="suggestion-job">Job Role</Label>
+                <Input
+                  id="suggestion-job"
+                  value={searchParams.businessType}
+                  onChange={handleInputChange}
+                  placeholder="e.g., software engineer, marketing manager"
+                />
+              </div>
+              
+              <Button 
+                onClick={handleGetSuggestions}
+                disabled={loadingSuggestions || !apiKeysStatus?.hasOpenaiKey}
+                className="w-full"
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                {loadingSuggestions ? "Generating..." : "Generate AI Suggestions"}
+              </Button>
+              
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Suggested Search Terms</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestions.map((suggestion, index) => (
+                      <Button
+                        key={index}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSearchParams(prev => ({ ...prev, businessType: suggestion }))}
+                      >
+                        {suggestion}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {availableCities.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Available Cities ({availableCities.length})</Label>
+                  <div className="text-sm text-gray-600 max-h-32 overflow-y-auto">
+                    {availableCities.slice(0, 20).join(", ")}
+                    {availableCities.length > 20 && "..."}
+                  </div>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </CardContent>
+    </Card>
   );
 }

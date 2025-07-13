@@ -11,11 +11,15 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { downloadCSV, exportToCSV } from "../lib/utils";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Loader2, FileUp, Download, AlertCircle, Trash2 } from "lucide-react";
+import { Loader2, FileUp, Download, AlertCircle, Trash2, Key, Settings } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import ApiKeySetup from "@/components/ApiKeySetup";
+import { useApiKeys } from "@/hooks/useApiKeys";
 
 export default function AccountPortal() {
   const { user, isLoading: isAuthLoading, isAuthenticated } = useAuth();
   const { data: savedBusinesses, isLoading: isBusinessesLoading, error } = useSavedBusinesses();
+  const { data: apiKeysStatus } = useApiKeys();
   const updateBusinessMutation = useUpdateSavedBusiness();
   const deleteBusinessMutation = useDeleteSavedBusiness();
   const importFromSearchMutation = useImportFromSearch();
@@ -33,6 +37,16 @@ export default function AccountPortal() {
   const [geocodingInProgress, setGeocodingInProgress] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<keyof SavedBusiness>("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [csvContent, setCsvContent] = useState<string>("");
+  const [skipDuplicates, setSkipDuplicates] = useState<boolean>(true);
+  const [replaceDuplicates, setReplaceDuplicates] = useState<boolean>(false);
+  const [csvPreviewData, setCsvPreviewData] = useState<SavedBusiness[]>([]);
+  const [duplicatesFound, setDuplicatesFound] = useState<SavedBusiness[]>([]);
+  const [existingDuplicates, setExistingDuplicates] = useState<SavedBusiness[]>([]);
+  const [showDuplicatesDialog, setShowDuplicatesDialog] = useState<boolean>(false);
+  const [cleanupResults, setCleanupResults] = useState<{fixed: number, issues: string[]}>({fixed: 0, issues: []});
+  const [showCleanupDialog, setShowCleanupDialog] = useState<boolean>(false);
   
   useEffect(() => {
     // Redirect to home if not authenticated
@@ -80,8 +94,6 @@ export default function AccountPortal() {
       if (response.ok) {
         const data = await response.json();
         return data.coordinates;
-      } else {
-        console.error('Geocoding failed:', response.status, response.statusText);
       }
     } catch (error) {
       console.error('Failed to geocode address:', error);
@@ -174,9 +186,7 @@ export default function AccountPortal() {
         } else {
           // No coordinates yet - trigger geocoding for this business
           if (!geocodingInProgress.has(business._id)) {
-            geocodeBusiness(business).catch(error => {
-              console.error('Geocoding error:', error);
-            });
+            geocodeBusiness(business);
           }
           // For now, show the business while geocoding is in progress
           columbusMatch = true;
@@ -249,15 +259,52 @@ export default function AccountPortal() {
           <div className="flex justify-between items-center">
             <div>
               <CardTitle className="text-2xl font-bold">Account Portal</CardTitle>
-              <CardDescription>Manage your saved companies and master list</CardDescription>
+              <CardDescription>Manage your saved companies and API settings</CardDescription>
             </div>
-            <Button variant="outline" onClick={logout}>Log Out</Button>
+            <div className="flex gap-2">
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline">
+                    <Key className="w-4 h-4 mr-2" />
+                    API Settings
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>API Key Management</DialogTitle>
+                    <DialogDescription>
+                      Configure your Google Places and OpenAI API keys for full functionality
+                    </DialogDescription>
+                  </DialogHeader>
+                  <ApiKeySetup />
+                </DialogContent>
+              </Dialog>
+              <Button variant="outline" onClick={logout}>Log Out</Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
             <div className="flex-1">
               <p><strong>Email:</strong> {(user as any)?.email}</p>
+            </div>
+            <div className="flex gap-4 text-sm">
+              <div className="flex items-center gap-2">
+                <span>Google Places API:</span>
+                {apiKeysStatus?.hasGooglePlacesKey ? (
+                  <Badge variant="default">Configured</Badge>
+                ) : (
+                  <Badge variant="destructive">Not Set</Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span>OpenAI API:</span>
+                {apiKeysStatus?.hasOpenaiKey ? (
+                  <Badge variant="default">Configured</Badge>
+                ) : (
+                  <Badge variant="destructive">Not Set</Badge>
+                )}
+              </div>
             </div>
           </div>
         </CardContent>

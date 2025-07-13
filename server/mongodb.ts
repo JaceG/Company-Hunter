@@ -1,7 +1,7 @@
 import { MongoClient, Db, ObjectId } from 'mongodb';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { User, UserCreate, SavedBusiness, SavedList } from '@shared/schema';
+import { User, UserCreate, SavedBusiness, SavedList, ApiKeys } from '@shared/schema';
 
 // MongoDB connection string from environment variables
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://jacegalloway:1313@cluster0.77bcf.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
@@ -12,7 +12,8 @@ const DB_NAME = 'businessSearchApp';
 const COLLECTIONS = {
   USERS: 'users',
   SAVED_BUSINESSES: 'savedBusinesses',
-  SAVED_LISTS: 'savedLists'
+  SAVED_LISTS: 'savedLists',
+  API_KEYS: 'apiKeys'
 };
 
 // MongoDB connection client
@@ -32,6 +33,7 @@ export async function connectToMongoDB(): Promise<Db> {
     await db.collection(COLLECTIONS.USERS).createIndex({ email: 1 }, { unique: true });
     await db.collection(COLLECTIONS.SAVED_BUSINESSES).createIndex({ userId: 1 });
     await db.collection(COLLECTIONS.SAVED_LISTS).createIndex({ userId: 1 });
+    await db.collection(COLLECTIONS.API_KEYS).createIndex({ userId: 1 }, { unique: true });
     
     return db;
   } catch (error) {
@@ -635,4 +637,67 @@ export async function importBusinessesForUser(
       _id: b._id!.toString()
     }))
   };
+}
+
+// API Keys Management Functions
+export async function saveApiKeys(userId: string, apiKeys: Partial<Pick<ApiKeys, 'googlePlacesApiKey' | 'openaiApiKey'>>): Promise<ApiKeys> {
+  const database = await connectToMongoDB();
+  const apiKeysCollection = database.collection<ApiKeys>(COLLECTIONS.API_KEYS);
+
+  const apiKeysData: ApiKeys = {
+    userId,
+    googlePlacesApiKey: apiKeys.googlePlacesApiKey,
+    openaiApiKey: apiKeys.openaiApiKey,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  };
+
+  // Upsert - update if exists, create if doesn't
+  const result = await apiKeysCollection.findOneAndUpdate(
+    { userId },
+    { 
+      $set: { 
+        ...apiKeysData,
+        updatedAt: new Date() 
+      },
+      $setOnInsert: {
+        createdAt: new Date()
+      }
+    },
+    { 
+      upsert: true, 
+      returnDocument: 'after' 
+    }
+  );
+
+  return {
+    ...result!,
+    _id: result!._id!.toString()
+  };
+}
+
+export async function getApiKeys(userId: string): Promise<ApiKeys | null> {
+  const database = await connectToMongoDB();
+  const apiKeysCollection = database.collection<ApiKeys>(COLLECTIONS.API_KEYS);
+
+  const apiKeys = await apiKeysCollection.findOne({ userId });
+  if (!apiKeys) return null;
+
+  return {
+    ...apiKeys,
+    _id: apiKeys._id!.toString()
+  };
+}
+
+export async function deleteApiKeys(userId: string): Promise<boolean> {
+  const database = await connectToMongoDB();
+  const apiKeysCollection = database.collection<ApiKeys>(COLLECTIONS.API_KEYS);
+
+  try {
+    const result = await apiKeysCollection.deleteOne({ userId });
+    return result.deletedCount > 0;
+  } catch (error) {
+    console.error(`Error deleting API keys for user ${userId}:`, error);
+    return false;
+  }
 }
