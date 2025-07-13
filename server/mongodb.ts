@@ -190,6 +190,18 @@ export async function getSavedBusinesses(userId: string, page: number = 1, limit
   
   if (fyveCheck) {
     console.log('FYVE Marketing found in database:', fyveCheck.name);
+  } else {
+    console.log('FYVE Marketing NOT found with regex search');
+    // Try exact search
+    const exactFyveCheck = await businessCollection.findOne({ 
+      userId, 
+      name: "FYVE Marketing" 
+    });
+    if (exactFyveCheck) {
+      console.log('FYVE Marketing found with exact search:', exactFyveCheck.name);
+    } else {
+      console.log('FYVE Marketing NOT found even with exact search');
+    }
   }
   if (sixthCityCheck) {
     console.log('6IXTH CITY found in database:', sixthCityCheck.name);
