@@ -129,7 +129,7 @@ export default function ApiKeySetup() {
                   <div>
                     <p className="font-medium">MongoDB Atlas</p>
                     <p className="text-sm text-gray-600">
-                      {apiKeysStatus?.hasMongodbUri ? "Custom URI configured" : "Using environment variable"}
+                      {apiKeysStatus?.hasMongodbUri ? "Custom URI configured" : "Environment variable required"}
                     </p>
                   </div>
                 </div>
@@ -181,16 +181,17 @@ export default function ApiKeySetup() {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="mongodb-uri">MongoDB Atlas URI (Optional)</Label>
+                <Label htmlFor="mongodb-uri">MongoDB Atlas URI (REQUIRED)</Label>
                 <Input
                   id="mongodb-uri"
                   type={showKeys ? "text" : "password"}
                   value={mongodbUri}
                   onChange={(e) => setMongodbUri(e.target.value)}
                   placeholder="mongodb+srv://username:password@cluster.mongodb.net/database"
+                  required
                 />
-                <p className="text-xs text-gray-500">
-                  Leave empty to use environment variable. Only set if you want to use a custom database.
+                <p className="text-xs text-red-600 font-medium">
+                  REQUIRED: This application cannot function without MongoDB Atlas. Create a free cluster at cloud.mongodb.com
                 </p>
               </div>
               
@@ -211,6 +212,13 @@ export default function ApiKeySetup() {
               >
                 {saveApiKeys.isPending ? "Saving..." : "Save Configuration"}
               </Button>
+              
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Important:</strong> MongoDB Atlas is the only supported database. The application will not start without a valid MongoDB Atlas connection string.
+                </AlertDescription>
+              </Alert>
             </div>
           </TabsContent>
           
@@ -285,6 +293,60 @@ export default function ApiKeySetup() {
                     <li>GPT-4 usage: ~$0.001 per suggestion generation</li>
                     <li>Very low cost compared to Google APIs</li>
                   </ul>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold mb-3 text-red-600">MongoDB Atlas Setup (REQUIRED)</h3>
+                <div className="space-y-2 text-sm">
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertDescription>
+                      <strong>CRITICAL:</strong> MongoDB Atlas is absolutely required - this application cannot function without it. There is no alternative database option.
+                    </AlertDescription>
+                  </Alert>
+
+                  <p><strong>1. Create a MongoDB Atlas Account:</strong></p>
+                  <a 
+                    href="https://cloud.mongodb.com/v2/register" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-blue-600 hover:underline"
+                  >
+                    cloud.mongodb.com/register <ExternalLink className="h-3 w-3" />
+                  </a>
+                  
+                  <p><strong>2. Create a Free Cluster:</strong></p>
+                  <ul className="list-disc ml-6 space-y-1">
+                    <li>Click "Create" and select "M0 Sandbox" (Free tier)</li>
+                    <li>Choose your preferred cloud provider and region</li>
+                    <li>Name your cluster (e.g., "BusinessSearchApp")</li>
+                  </ul>
+                  
+                  <p><strong>3. Configure Database Access:</strong></p>
+                  <ul className="list-disc ml-6 space-y-1">
+                    <li>Go to "Database Access" in the left sidebar</li>
+                    <li>Click "Add New Database User"</li>
+                    <li>Create a username and strong password</li>
+                    <li>Grant "Read and write to any database" permissions</li>
+                  </ul>
+
+                  <p><strong>4. Configure Network Access:</strong></p>
+                  <ul className="list-disc ml-6 space-y-1">
+                    <li>Go to "Network Access" in the left sidebar</li>
+                    <li>Click "Add IP Address"</li>
+                    <li>Select "Allow access from anywhere" (0.0.0.0/0)</li>
+                  </ul>
+
+                  <p><strong>5. Get Connection String:</strong></p>
+                  <ul className="list-disc ml-6 space-y-1">
+                    <li>Go to "Database" and click "Connect" on your cluster</li>
+                    <li>Select "Connect your application"</li>
+                    <li>Copy the connection string</li>
+                    <li>Replace &lt;password&gt; with your database user password</li>
+                  </ul>
+
+                  <p className="font-medium text-red-600">Without MongoDB Atlas, this application will not start!</p>
                 </div>
               </div>
             </div>

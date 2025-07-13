@@ -3,14 +3,16 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { User, UserCreate, SavedBusiness, SavedList, ApiKeys } from '@shared/schema';
 
-// MongoDB connection string from environment variables
+// MongoDB connection string - REQUIRED for application to function
 const MONGODB_URI = process.env.MONGODB_URI || process.env.DATABASE_URL;
 const JWT_SECRET = process.env.JWT_SECRET || 'business-search-token-secret-2025';
 
 if (!MONGODB_URI) {
-  console.error('⚠️  MongoDB connection string not found!');
-  console.error('Please set MONGODB_URI or DATABASE_URL environment variable.');
+  console.error('❌ CRITICAL ERROR: MongoDB Atlas connection string is REQUIRED!');
+  console.error('This application cannot function without MongoDB Atlas.');
+  console.error('Please configure MONGODB_URI in your environment variables or through the Account Portal.');
   console.error('Example: MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/database');
+  throw new Error('MongoDB Atlas URI is required - application cannot start without database connection');
 }
 
 // Database and collection names

@@ -113,9 +113,11 @@ The application is configured to run on Replit with:
 - If no server keys exist, users must configure their own through the Account Portal
 
 ### MongoDB Configuration:
-- No hardcoded connection strings - uses environment variables only
+- **MANDATORY**: MongoDB Atlas is the only supported database - no alternatives
+- Application will not start without a valid MongoDB Atlas connection string
 - Supports both `MONGODB_URI` and `DATABASE_URL` environment variables
-- Shows clear error messages if MongoDB connection is not configured
+- Users must configure MongoDB Atlas URI through Account Portal if no environment variable exists
+- Clear error messages when MongoDB connection is missing or invalid
 - See SETUP.md for complete MongoDB Atlas setup instructions
 
 ## Recent Updates (July 2025)
