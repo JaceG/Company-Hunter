@@ -514,12 +514,17 @@ export default function AccountPortal() {
                 
                 <div className="flex items-center gap-2">
                   <Input
-                    placeholder="Search companies (e.g., FYVE)..."
+                    placeholder="Search companies (e.g., FYVE, 6IXTH CITY)..."
                     value={debugSearchQuery}
                     onChange={(e) => setDebugSearchQuery(e.target.value)}
                     className="w-64"
                   />
                   {debugSearchQuery && <SearchResults query={debugSearchQuery} />}
+                </div>
+                
+                <div className="text-xs text-muted-foreground">
+                  <p>Companies are sorted by date added (newest first). Missing companies might be on later pages.</p>
+                  <p>Use the search box above to find specific companies across all pages.</p>
                 </div>
                 
                 <div className="text-sm text-muted-foreground">
