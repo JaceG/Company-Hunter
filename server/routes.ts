@@ -706,6 +706,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     console.log("Column mapping:", columnMap);
+    console.log("CSV Headers:", headers);
+    console.log("Total lines in CSV:", lines.length);
     
     const businesses: ImportBusiness[] = [];
     
@@ -716,11 +718,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const values = lines[i].split(separator).map(v => v.trim().replace(/^"|"$/g, ''));
       
       // Only add if we can extract a name (columnMap.name should always be valid)
-      if (values[columnMap.name]) {
+      if (values[columnMap.name] && values[columnMap.name].trim()) {
         const business: ImportBusiness = {
-          name: values[columnMap.name],
-          website: columnMap.website >= 0 ? values[columnMap.website] : undefined,
-          location: columnMap.location >= 0 ? values[columnMap.location] : undefined,
+          name: values[columnMap.name].trim(),
+          website: columnMap.website >= 0 ? (values[columnMap.website] || '').trim() : undefined,
+          location: columnMap.location >= 0 ? (values[columnMap.location] || '').trim() : undefined,
           isBadLead: false, // Default values for other fields
           notes: '',
           distance: '',
@@ -728,8 +730,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
         
         businesses.push(business);
+        
+        // Log FYVE specifically to debug
+        if (business.name.toLowerCase().includes('fyve')) {
+          console.log("Found FYVE Marketing in CSV:", business);
+        }
+      } else {
+        console.log(`Skipped row ${i}: missing name. Values:`, values);
       }
     }
+    
+    console.log(`Parsed ${businesses.length} businesses from CSV`);
     
     return businesses;
   }
@@ -1203,6 +1214,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Failed to generate suggestions", 
         error: error instanceof Error ? error.message : String(error)
       });
+    }
+  });
+
+  // Search saved businesses for debugging
+  app.get("/api/my/businesses/search", authenticate, async (req, res) => {
+    try {
+      const userId = req.user!.userId;
+      const query = req.query.q as string;
+      
+      if (!query) {
+        return res.status(400).json({ message: "Search query required" });
+      }
+      
+      const result = await getSavedBusinesses(userId, 1, 1000); // Get all businesses
+      const filteredBusinesses = result.businesses.filter(business => 
+        business.name?.toLowerCase().includes(query.toLowerCase()) ||
+        business.website?.toLowerCase().includes(query.toLowerCase()) ||
+        business.location?.toLowerCase().includes(query.toLowerCase())
+      );
+      
+      res.json({ 
+        businesses: filteredBusinesses,
+        total: filteredBusinesses.length,
+        searchQuery: query
+      });
+    } catch (error) {
+      console.error("Error searching saved businesses:", error);
+      res.status(500).json({ message: "An error occurred while searching businesses" });
     }
   });
 

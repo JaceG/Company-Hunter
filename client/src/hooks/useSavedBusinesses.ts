@@ -108,3 +108,15 @@ export function useClearAllSavedBusinesses() {
     }
   });
 }
+
+// Search saved businesses
+export function useSearchSavedBusinesses(query: string) {
+  return useQuery({
+    queryKey: ["/api/my/businesses/search", query],
+    queryFn: async () => {
+      if (!query.trim()) return { businesses: [], total: 0, searchQuery: query };
+      return await apiRequest("GET", `/api/my/businesses/search?q=${encodeURIComponent(query)}`);
+    },
+    enabled: !!query.trim(),
+  });
+}
