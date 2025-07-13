@@ -27,7 +27,6 @@ interface StateSearchParams {
   businessType: string;
   state: string;
   maxCities: number;
-  maxResults: number;
 }
 
 export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
@@ -42,8 +41,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
   const [stateParams, setStateParams] = useState<StateSearchParams>({
     businessType: "",
     state: "Ohio",
-    maxCities: 5,
-    maxResults: 50
+    maxCities: 5
   });
   
   const [jobRole, setJobRole] = useState("");
@@ -144,7 +142,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
         businessType: stateParams.businessType,
         location: `${selectedCities.join(", ")} (${selectedCities.length} cities)`,
         radius: "custom",
-        maxResults: result.total.toString()
+        maxResults: `${result.total} results (up to 20 per city)`
       });
     } catch (error) {
       console.error("State search error:", error);
@@ -456,22 +454,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
                 </Select>
               </div>
               
-              <div className="space-y-2">
-                <Label htmlFor="state-max-results">Max Results per City</Label>
-                <Select 
-                  value={stateParams.maxResults.toString()} 
-                  onValueChange={(value) => handleStateInputChange('maxResults', parseInt(value))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="10">10 results per city</SelectItem>
-                    <SelectItem value="20">20 results per city</SelectItem>
-                    <SelectItem value="25">25 results per city</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+
 
               <div className="space-y-2">
                 <Button 

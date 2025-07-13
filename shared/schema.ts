@@ -125,7 +125,7 @@ export const stateSearchParamsSchema = z.object({
   businessType: z.string().min(1, "Business type is required"),
   state: z.string().min(2, "State is required"),
   maxCities: z.number().min(1).max(5).default(5), // Reduced for compliance
-  maxResults: z.string().or(z.number()),
+  selectedCities: z.array(z.string()).optional(), // For checkbox-selected cities
 });
 
 export type StateSearchParams = z.infer<typeof stateSearchParamsSchema>;

@@ -6,7 +6,7 @@ interface StateSearchParams {
   businessType: string;
   state: string;
   maxCities: number;
-  maxResults: number;
+  selectedCities?: string[];
 }
 
 interface StateSearchResult {

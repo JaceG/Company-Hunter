@@ -1272,7 +1272,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // State-wide business search
   app.post("/api/businesses/search/state", optionalAuth, async (req, res) => {
     try {
-      const { businessType, state, maxCities = 5, maxResults = 50, selectedCities } = req.body;
+      const { businessType, state, maxCities = 5, selectedCities } = req.body;
       
       if (!businessType || !state) {
         return res.status(400).json({ message: "Business type and state are required" });
@@ -1280,7 +1280,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Enforce limits for performance - hard limits
       const limitedMaxCities = Math.min(maxCities, 5); // Maximum 5 cities for optimal performance
-      const limitedMaxResults = Math.min(maxResults, 50); // Reduced max results
       
       // Get user's API keys or use system keys
       let googleApiKey = process.env.GOOGLE_PLACES_API_KEY;
@@ -1384,10 +1383,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const cityBusinesses: Business[] = [];
             
             if (placesData.status === "OK" && placesData.results) {
-              // Process results for this city (distribute results across cities)
-              const resultsPerCity = Math.max(1, Math.floor(limitedMaxResults / cities.length));
-              
-              for (const place of placesData.results.slice(0, resultsPerCity)) {
+              // Process all results for this city (Google Places API returns max 20 per request)
+              for (const place of placesData.results) {
                 // Use basic place data to avoid excessive Details API calls
                 const distance = place.geometry?.location ? 
                   calculateDistance(lat, lng, place.geometry.location.lat, place.geometry.location.lng) : 0;
