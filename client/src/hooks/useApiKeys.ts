@@ -24,11 +24,7 @@ export function useApiKeys() {
 export function useSaveApiKeys() {
   return useMutation({
     mutationFn: async (data: SaveApiKeysData) => {
-      return await apiRequest("/api/auth/api-keys", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
+      return await apiRequest("POST", "/api/auth/api-keys", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/api-keys"] });
@@ -39,9 +35,7 @@ export function useSaveApiKeys() {
 export function useDeleteApiKeys() {
   return useMutation({
     mutationFn: async () => {
-      return await apiRequest("/api/auth/api-keys", {
-        method: "DELETE",
-      });
+      return await apiRequest("DELETE", "/api/auth/api-keys");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/api-keys"] });

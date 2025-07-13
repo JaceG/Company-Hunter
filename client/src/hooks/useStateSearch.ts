@@ -34,11 +34,7 @@ interface StateCitiesResult {
 export function useStateSearch() {
   return useMutation({
     mutationFn: async (params: StateSearchParams): Promise<StateSearchResult> => {
-      return await apiRequest("/api/businesses/search/state", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(params),
-      });
+      return await apiRequest("POST", "/api/businesses/search/state", params);
     },
   });
 }
@@ -46,11 +42,7 @@ export function useStateSearch() {
 export function useStateCities() {
   return useMutation({
     mutationFn: async (params: StateCitiesParams): Promise<StateCitiesResult> => {
-      return await apiRequest("/api/businesses/state-cities", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(params),
-      });
+      return await apiRequest("POST", "/api/businesses/state-cities", params);
     },
   });
 }
