@@ -123,8 +123,25 @@ export type ApiKeys = z.infer<typeof apiKeysSchema> & {
 export const stateSearchParamsSchema = z.object({
   businessType: z.string().min(1, "Business type is required"),
   state: z.string().min(2, "State is required"),
-  maxCities: z.number().min(1).max(100).default(100),
+  maxCities: z.number().min(1).max(5).default(5), // Reduced for compliance
   maxResults: z.string().or(z.number()),
 });
 
 export type StateSearchParams = z.infer<typeof stateSearchParamsSchema>;
+
+// Temporary search results table schema (compliant with Google ToS)
+export const temporarySearchResultSchema = z.object({
+  id: z.number().optional(),
+  sessionId: z.string().min(1, "Session ID is required"),
+  name: z.string().min(1, "Name is required"),
+  website: z.string().optional(),
+  location: z.string().min(1, "Location is required"),
+  distance: z.string().min(1, "Distance is required"),
+  isBadLead: z.boolean().default(false),
+  notes: z.string().default(""),
+  careerLink: z.string().default(""),
+  createdAt: z.date().default(() => new Date()),
+  expiresAt: z.date().default(() => new Date(Date.now() + 24 * 60 * 60 * 1000)), // 24 hour expiry
+});
+
+export type TemporarySearchResult = z.infer<typeof temporarySearchResultSchema>;

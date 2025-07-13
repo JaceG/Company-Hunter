@@ -1407,18 +1407,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Return results WITHOUT permanently storing to comply with Google ToS
-      // Users can manually save individual businesses they're interested in
+      // Store results temporarily in in-memory storage for duplicate detection and export
+      // Clear previous search results first
+      await storage.clearAllBusinesses();
+      
+      if (businesses.length > 0) {
+        const insertBusinesses = businesses.map(business => ({
+          name: business.name,
+          website: business.website,
+          location: business.location,
+          distance: business.distance,
+          isBadLead: business.isBadLead,
+          notes: business.notes,
+          careerLink: business.careerLink
+        }));
+        
+        await storage.saveBatchBusinesses(insertBusinesses);
+      }
+
       res.json({
         businesses: businesses.slice(0, limitedMaxResults),
         total: businesses.length,
         searchedCities,
         totalCities: allCities.length,
-        note: "Results are temporary and not stored to comply with Google Maps API terms. Save individual businesses you're interested in.",
+        note: "Results stored temporarily for duplicate detection. Use 'Save to Account' to permanently save businesses you're interested in.",
         compliance: {
           maxCitiesLimited: limitedMaxCities,
           originalRequest: { maxCities, maxResults },
-          limitReason: "Google API compliance - limited to 5 cities max"
+          limitReason: "Google API compliance - limited to 5 cities max",
+          temporaryStorage: "Results stored temporarily for duplicate detection and export functionality"
         }
       });
       
