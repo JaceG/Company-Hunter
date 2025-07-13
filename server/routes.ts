@@ -233,7 +233,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Google Places API endpoint
-  const GOOGLE_PLACES_API_URL = "https://maps.googleapis.com/maps/api/place";
+  const GOOGLE_PLACES_API_URL = "https://places.googleapis.com/v1/places";
   const API_KEY = process.env.GOOGLE_PLACES_API_KEY || "";
 
   // Helper function to convert miles to meters for Google Places API
@@ -801,40 +801,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const textQuery = `${businessType} in ${city}, ${state}`;
         
         try {
-          const placesResponse = await fetch(
-            `${GOOGLE_PLACES_API_URL}/textsearch/json?query=${encodeURIComponent(textQuery)}&key=${googleApiKey}`
-          );
+          const requestBody = {
+            textQuery: textQuery,
+            maxResultCount: 3, // Max 3 per city
+            includedType: "establishment"
+          };
+          
+          const placesResponse = await fetch(`${GOOGLE_PLACES_API_URL}:searchText`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-Api-Key': googleApiKey,
+              'X-Goog-FieldMask': 'places.id,places.displayName,places.websiteUri,places.formattedAddress'
+            },
+            body: JSON.stringify(requestBody)
+          });
           const placesData = await placesResponse.json();
           
-          if (placesData.status === "OK" && placesData.results) {
-            for (const place of placesData.results.slice(0, 3)) { // Max 3 per city
+          if (placesResponse.ok && placesData.places) {
+            for (const place of placesData.places) {
               if (businesses.length >= Number(maxResults)) break;
               
-              // Get details with caching
-              let details = businessDetailsCache.get(place.place_id);
-              if (!details) {
-                const detailsResponse = await fetch(
-                  `${GOOGLE_PLACES_API_URL}/details/json?place_id=${place.place_id}&fields=name,website,formatted_address&key=${googleApiKey}`
-                );
-                const detailsData = await detailsResponse.json();
-                
-                if (detailsData.status === "OK") {
-                  details = detailsData.result;
-                  businessDetailsCache.set(place.place_id, details);
-                } else {
-                  continue;
-                }
-              }
-              
               businesses.push({
-                name: details.name || place.name,
-                website: details.website || "",
-                location: details.formatted_address || place.vicinity || "",
+                name: place.displayName?.text || "Unknown Business",
+                website: place.websiteUri || "",
+                location: place.formattedAddress || "",
                 distance: `${city}, ${state}`,
                 isBadLead: false,
                 notes: "",
                 isDuplicate: false,
-                careerLink: details.website ? `${details.website.replace(/\/+$/, '')}/careers` : ""
+                careerLink: place.websiteUri ? `${place.websiteUri.replace(/\/+$/, '')}/careers` : ""
               });
             }
           }
@@ -942,55 +938,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Searching for: "${textQuery}"`);
         
         do {
-          let url = `${GOOGLE_PLACES_API_URL}/textsearch/json?query=${encodeURIComponent(textQuery)}&key=${googleApiKey}`;
+          const requestBody = {
+            textQuery: textQuery,
+            maxResultCount: Math.min(20, maxResultsNum - businesses.length),
+            includedType: "establishment"
+          };
           
           if (nextPageToken) {
-            url += `&pagetoken=${nextPageToken}`;
+            requestBody.pageToken = nextPageToken;
             await new Promise(resolve => setTimeout(resolve, 2000));
           }
           
-          console.log(`Making Google Places API call: ${url.replace(googleApiKey, 'HIDDEN_API_KEY')}`);
-          const placesResponse = await fetch(url);
+          console.log(`Making Google Places API (New) call with query: "${textQuery}"`);
+          const placesResponse = await fetch(`${GOOGLE_PLACES_API_URL}:searchText`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-Api-Key': googleApiKey,
+              'X-Goog-FieldMask': 'places.id,places.displayName,places.websiteUri,places.formattedAddress,nextPageToken'
+            },
+            body: JSON.stringify(requestBody)
+          });
           const placesData = await placesResponse.json();
           
-          console.log(`Google Places API response status: ${placesData.status}`);
-          if (placesData.error_message) {
-            console.log(`Google Places API error: ${placesData.error_message}`);
-          }
-          
-          if (placesData.status !== "OK" && placesData.status !== "ZERO_RESULTS") {
+          console.log(`Google Places API (New) response status: ${placesResponse.status}`);
+          if (placesData.error) {
+            console.log(`Google Places API error: ${JSON.stringify(placesData.error)}`);
             return res.status(400).json({ 
               message: "Failed to search businesses",
-              details: placesData.status,
-              error: placesData.error_message || "Unknown Google Places API error"
+              details: placesData.error.message || "Unknown Google Places API error"
             });
           }
           
-          nextPageToken = placesData.next_page_token || null;
-          const pageResults = placesData.results || [];
-          const resultsToProcess = pageResults.slice(0, maxResultsNum - businesses.length);
+          if (!placesResponse.ok) {
+            return res.status(400).json({ 
+              message: "Failed to search businesses",
+              details: `HTTP ${placesResponse.status}: ${placesResponse.statusText}`
+            });
+          }
           
-          // Process results for text search
-          for (const place of resultsToProcess) {
-            const detailsResponse = await fetch(
-              `${GOOGLE_PLACES_API_URL}/details/json?place_id=${place.place_id}&fields=name,website,formatted_address&key=${googleApiKey}`
-            );
-            
-            const detailsData = await detailsResponse.json();
-            
-            if (detailsData.status === "OK") {
-              const details = detailsData.result;
-              
-              businesses.push({
-                name: details.name || place.name,
-                website: details.website || '',
-                location: details.formatted_address || place.formatted_address || '',
-                distance: `${radius} mi radius`,
-                isBadLead: false,
-                notes: '',
-                careerLink: details.website ? `${details.website.replace(/\/+$/, '')}/careers` : ""
-              });
-            }
+          nextPageToken = placesData.nextPageToken || null;
+          const pageResults = placesData.places || [];
+          
+          console.log(`Found ${pageResults.length} places in this page`);
+          
+          // Process results for new API format
+          for (const place of pageResults) {
+            businesses.push({
+              name: place.displayName?.text || "Unknown Business",
+              website: place.websiteUri || '',
+              location: place.formattedAddress || '',
+              distance: `${radius} mi radius`,
+              isBadLead: false,
+              notes: '',
+              careerLink: place.websiteUri ? `${place.websiteUri.replace(/\/+$/, '')}/careers` : ""
+            });
           }
           
         } while (nextPageToken && businesses.length < maxResultsNum);
@@ -1397,13 +1399,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (businessDetailsCache.has(placesKey)) {
               placesData = businessDetailsCache.get(placesKey);
             } else {
-              // Search for businesses in this city
-              const placesUrl = `${GOOGLE_PLACES_API_URL}/nearbysearch/json?location=${lat},${lng}&radius=16093&keyword=${encodeURIComponent(businessType)}&type=establishment&key=${googleApiKey}`;
-              const placesResponse = await fetch(placesUrl);
+              // Search for businesses using new Places API
+              const requestBody = {
+                textQuery: `${businessType} in ${city}, ${state}`,
+                maxResultCount: 20,
+                includedType: "establishment"
+              };
+              
+              const placesResponse = await fetch(`${GOOGLE_PLACES_API_URL}:searchText`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-Goog-Api-Key': googleApiKey,
+                  'X-Goog-FieldMask': 'places.id,places.displayName,places.websiteUri,places.formattedAddress'
+                },
+                body: JSON.stringify(requestBody)
+              });
               placesData = await placesResponse.json();
               
               // Cache for 1 hour
-              if (placesData.status === "OK") {
+              if (placesResponse.ok && placesData.places) {
                 businessDetailsCache.set(placesKey, placesData);
                 setTimeout(() => businessDetailsCache.delete(placesKey), 60 * 60 * 1000);
               }
@@ -1411,22 +1426,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             const cityBusinesses: Business[] = [];
             
-            if (placesData.status === "OK" && placesData.results) {
-              // Process all results for this city (Google Places API returns max 20 per request)
-              for (const place of placesData.results) {
-                // Use basic place data to avoid excessive Details API calls
-                const distance = place.geometry?.location ? 
-                  calculateDistance(lat, lng, place.geometry.location.lat, place.geometry.location.lng) : 0;
-                
+            if (placesData.places && placesData.places.length > 0) {
+              // Process all results for this city
+              for (const place of placesData.places) {
                 const business: Business = {
-                  name: place.name,
-                  website: "", // Don't fetch website details to reduce API calls
-                  location: place.vicinity || `${city}, ${state}`,
-                  distance: `${distance.toFixed(1)} mi`,
+                  name: place.displayName?.text || "Unknown Business",
+                  website: place.websiteUri || "", 
+                  location: place.formattedAddress || `${city}, ${state}`,
+                  distance: `${city}, ${state}`,
                   isBadLead: false,
                   notes: "",
                   isDuplicate: false,
-                  careerLink: ""
+                  careerLink: place.websiteUri ? `${place.websiteUri.replace(/\/+$/, '')}/careers` : ""
                 };
                 
                 cityBusinesses.push(business);
