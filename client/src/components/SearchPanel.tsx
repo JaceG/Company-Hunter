@@ -50,8 +50,11 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
   
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [availableCities, setAvailableCities] = useState<string[]>([]);
+  const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showCities, setShowCities] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [loadingCities, setLoadingCities] = useState(false);
   
   const { data: apiKeysStatus } = useApiKeys();
   const stateSearch = useStateSearch();
@@ -113,26 +116,41 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
       return;
     }
 
+    if (selectedCities.length === 0) {
+      toast({
+        title: "Cities required",
+        description: "Please select at least one city to search",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
-      const result = await stateSearch.mutateAsync(stateParams);
+      const searchParams = {
+        ...stateParams,
+        selectedCities,
+        maxCities: selectedCities.length
+      };
+      
+      const result = await stateSearch.mutateAsync(searchParams);
       
       toast({
-        title: "State search completed",
-        description: `Found ${result.total} businesses across ${result.searchedCities} cities`,
+        title: "Search completed",
+        description: `Found ${result.total} businesses across ${selectedCities.length} selected cities`,
       });
       
       // Convert state search result to regular search format for display
       onSearch({
         businessType: stateParams.businessType,
-        location: `${stateParams.state} (${result.searchedCities} cities)`,
-        radius: "statewide",
+        location: `${selectedCities.join(", ")} (${selectedCities.length} cities)`,
+        radius: "custom",
         maxResults: result.total.toString()
       });
     } catch (error) {
       console.error("State search error:", error);
       toast({
         title: "Search failed",
-        description: "Failed to search state. Please check your API keys and try again.",
+        description: "Failed to search selected cities. Please check your API keys and try again.",
         variant: "destructive"
       });
     }
@@ -195,11 +213,24 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
   };
 
   const getCitiesForState = async (state: string) => {
+    if (!apiKeysStatus?.hasOpenaiKey) {
+      toast({
+        title: "OpenAI API key required",
+        description: "Please set up your OpenAI API key for city suggestions",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
-      const result = await stateCities.mutateAsync({ state, maxCities: 100 });
+      setLoadingCities(true);
+      const result = await stateCities.mutateAsync({ state, maxCities: 20 });
+      setAvailableCities(result.cities || []);
+      setSelectedCities([]);
+      setShowCities(true);
       toast({
         title: "Cities loaded",
-        description: `Found ${result.count} cities in ${state}. Estimated cost: ${result.estimatedCost.total}`,
+        description: `Found ${result.count} cities in ${state}. Select up to 5 cities to search.`,
       });
     } catch (error) {
       console.error("Error getting cities:", error);
@@ -208,7 +239,26 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
         description: "Please check your API key setup",
         variant: "destructive"
       });
+    } finally {
+      setLoadingCities(false);
     }
+  };
+
+  const handleCityToggle = (city: string) => {
+    setSelectedCities(prev => {
+      if (prev.includes(city)) {
+        return prev.filter(c => c !== city);
+      } else if (prev.length < 5) {
+        return [...prev, city];
+      } else {
+        toast({
+          title: "Maximum cities reached",
+          description: "You can select up to 5 cities for optimal performance",
+          variant: "destructive"
+        });
+        return prev;
+      }
+    });
   };
 
   const US_STATES = [
@@ -406,62 +456,83 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
                 </Select>
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="max-cities">Max Cities</Label>
-                  <Select 
-                    value={stateParams.maxCities.toString()} 
-                    onValueChange={(value) => handleStateInputChange('maxCities', parseInt(value))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="3">Top 3 cities</SelectItem>
-                      <SelectItem value="5">Top 5 cities (recommended)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="state-max-results">Max Results</Label>
-                  <Select 
-                    value={stateParams.maxResults.toString()} 
-                    onValueChange={(value) => handleStateInputChange('maxResults', parseInt(value))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="25">25 results</SelectItem>
-                      <SelectItem value="50">50 results (max)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="state-max-results">Max Results per City</Label>
+                <Select 
+                  value={stateParams.maxResults.toString()} 
+                  onValueChange={(value) => handleStateInputChange('maxResults', parseInt(value))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10 results per city</SelectItem>
+                    <SelectItem value="20">20 results per city</SelectItem>
+                    <SelectItem value="25">25 results per city</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>Optimized Search:</strong> Limited to 5 cities for best performance. Estimated cost: ${(Math.min(stateParams.maxCities, 5) * 0.049).toFixed(2)} for {Math.min(stateParams.maxCities, 5)} cities. Includes duplicate detection and export features.
-                </AlertDescription>
-              </Alert>
+              <div className="space-y-2">
+                <Button 
+                  variant="outline"
+                  onClick={() => getCitiesForState(stateParams.state)}
+                  disabled={loadingCities || !apiKeysStatus?.hasOpenaiKey}
+                  className="w-full"
+                >
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  {loadingCities ? "Loading..." : `Get AI City Suggestions for ${stateParams.state}`}
+                </Button>
+              </div>
+
+              {showCities && availableCities.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Select Cities to Search (max 5)</Label>
+                    <span className="text-sm text-muted-foreground">
+                      {selectedCities.length}/5 selected
+                    </span>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto border rounded-md p-3 space-y-2">
+                    {availableCities.map((city) => (
+                      <div key={city} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`city-${city}`}
+                          checked={selectedCities.includes(city)}
+                          onCheckedChange={() => handleCityToggle(city)}
+                          disabled={!selectedCities.includes(city) && selectedCities.length >= 5}
+                        />
+                        <Label 
+                          htmlFor={`city-${city}`} 
+                          className={`text-sm cursor-pointer ${
+                            !selectedCities.includes(city) && selectedCities.length >= 5 
+                              ? 'text-muted-foreground' 
+                              : ''
+                          }`}
+                        >
+                          {city}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedCities.length > 0 && (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Ready to Search:</strong> {selectedCities.length} cities selected. Estimated cost: ${(selectedCities.length * 0.049).toFixed(2)}. Includes duplicate detection and export features.
+                  </AlertDescription>
+                </Alert>
+              )}
               
               <Button 
                 onClick={handleStateSearch}
-                disabled={stateSearch.isPending || !apiKeysStatus?.hasGooglePlacesKey} 
+                disabled={stateSearch.isPending || !apiKeysStatus?.hasGooglePlacesKey || selectedCities.length === 0} 
                 className="w-full"
               >
-                {stateSearch.isPending ? "Searching State..." : `Search ${stateParams.state}`}
-              </Button>
-              
-              <Button 
-                variant="outline"
-                onClick={() => getCitiesForState(stateParams.state)}
-                disabled={stateCities.isPending}
-                className="w-full"
-              >
-                {stateCities.isPending ? "Loading..." : `Preview Cities for ${stateParams.state}`}
+                {stateSearch.isPending ? "Searching..." : `Search ${selectedCities.length} Selected Cities`}
               </Button>
             </div>
           </TabsContent>

@@ -1272,7 +1272,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // State-wide business search
   app.post("/api/businesses/search/state", optionalAuth, async (req, res) => {
     try {
-      const { businessType, state, maxCities = 5, maxResults = 50 } = req.body;
+      const { businessType, state, maxCities = 5, maxResults = 50, selectedCities } = req.body;
       
       if (!businessType || !state) {
         return res.status(400).json({ message: "Business type and state are required" });
@@ -1302,15 +1302,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Get top cities for the state (dynamically generated, cached for 24 hours)
-      const allCities = await getTopCitiesForState(state, 10); // Generate max 10 cities, use only 5
-      if (allCities.length === 0) {
-        return res.status(400).json({ 
-          message: `Unable to find cities for "${state}". Please try a different state or check your OpenAI API key.`
-        });
+      // Use selected cities if provided, otherwise get top cities for the state
+      let cities;
+      if (selectedCities && selectedCities.length > 0) {
+        cities = selectedCities.slice(0, 5); // Limit to 5 cities max
+        console.log(`Using ${cities.length} selected cities:`, cities);
+      } else {
+        // Get top cities for the state (dynamically generated, cached for 24 hours)
+        const allCities = await getTopCitiesForState(state, 10); // Generate max 10 cities, use only 5
+        if (allCities.length === 0) {
+          return res.status(400).json({ 
+            message: `Unable to find cities for "${state}". Please try a different state or check your OpenAI API key.`
+          });
+        }
+        cities = allCities.slice(0, limitedMaxCities);
+        console.log(`Using ${cities.length} top cities for ${state}:`, cities);
       }
-      
-      const cities = allCities.slice(0, limitedMaxCities);
       const businesses: Business[] = [];
       let searchedCities = 0;
       
