@@ -129,7 +129,7 @@ export default function ApiKeySetup() {
                   <div>
                     <p className="font-medium">MongoDB Atlas</p>
                     <p className="text-sm text-gray-600">
-                      {apiKeysStatus?.hasMongodbUri ? "Custom URI configured" : "Environment variable required"}
+                      {apiKeysStatus?.hasMongodbUri ? "Custom URI configured" : "Using environment variable"}
                     </p>
                   </div>
                 </div>
@@ -181,18 +181,14 @@ export default function ApiKeySetup() {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="mongodb-uri">MongoDB Atlas URI (REQUIRED)</Label>
+                <Label htmlFor="mongodb-uri">MongoDB Atlas URI</Label>
                 <Input
                   id="mongodb-uri"
                   type={showKeys ? "text" : "password"}
                   value={mongodbUri}
                   onChange={(e) => setMongodbUri(e.target.value)}
                   placeholder="mongodb+srv://username:password@cluster.mongodb.net/database"
-                  required
                 />
-                <p className="text-xs text-red-600 font-medium">
-                  REQUIRED: This application cannot function without MongoDB Atlas. Create a free cluster at cloud.mongodb.com
-                </p>
               </div>
               
               <div className="flex items-center gap-2">
@@ -213,12 +209,7 @@ export default function ApiKeySetup() {
                 {saveApiKeys.isPending ? "Saving..." : "Save Configuration"}
               </Button>
               
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>Important:</strong> MongoDB Atlas is the only supported database. The application will not start without a valid MongoDB Atlas connection string.
-                </AlertDescription>
-              </Alert>
+
             </div>
           </TabsContent>
           
@@ -297,15 +288,8 @@ export default function ApiKeySetup() {
               </div>
 
               <div>
-                <h3 className="text-lg font-semibold mb-3 text-red-600">MongoDB Atlas Setup (REQUIRED)</h3>
+                <h3 className="text-lg font-semibold mb-3">MongoDB Atlas Setup</h3>
                 <div className="space-y-2 text-sm">
-                  <Alert>
-                    <Info className="h-4 w-4" />
-                    <AlertDescription>
-                      <strong>CRITICAL:</strong> MongoDB Atlas is absolutely required - this application cannot function without it. There is no alternative database option.
-                    </AlertDescription>
-                  </Alert>
-
                   <p><strong>1. Create a MongoDB Atlas Account:</strong></p>
                   <a 
                     href="https://cloud.mongodb.com/v2/register" 
@@ -345,8 +329,6 @@ export default function ApiKeySetup() {
                     <li>Copy the connection string</li>
                     <li>Replace &lt;password&gt; with your database user password</li>
                   </ul>
-
-                  <p className="font-medium text-red-600">Without MongoDB Atlas, this application will not start!</p>
                 </div>
               </div>
             </div>

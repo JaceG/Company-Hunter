@@ -8,11 +8,10 @@ const MONGODB_URI = process.env.MONGODB_URI || process.env.DATABASE_URL;
 const JWT_SECRET = process.env.JWT_SECRET || 'business-search-token-secret-2025';
 
 if (!MONGODB_URI) {
-  console.error('❌ CRITICAL ERROR: MongoDB Atlas connection string is REQUIRED!');
-  console.error('This application cannot function without MongoDB Atlas.');
-  console.error('Please configure MONGODB_URI in your environment variables or through the Account Portal.');
+  console.error('MongoDB connection string not found.');
+  console.error('Please set MONGODB_URI or DATABASE_URL environment variable.');
   console.error('Example: MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/database');
-  throw new Error('MongoDB Atlas URI is required - application cannot start without database connection');
+  throw new Error('MongoDB connection string required');
 }
 
 // Database and collection names
