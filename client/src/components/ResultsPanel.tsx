@@ -46,7 +46,6 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
         const savedDomain = normalizeUrl(savedBusiness.website);
         
         if (businessDomain === savedDomain) {
-          console.log(`Duplicate found by website: ${business.name} (${businessDomain}) matches ${savedBusiness.name} (${savedDomain})`);
           return true;
         }
       }
@@ -63,7 +62,6 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
         const savedName = normalizeName(savedBusiness.name);
         
         if (businessName === savedName) {
-          console.log(`Duplicate found by name: ${business.name} (${businessName}) matches ${savedBusiness.name} (${savedName})`);
           return true;
         }
       }
@@ -71,13 +69,7 @@ export default function ResultsPanel({ businesses, isLoading, error, onRetry }: 
       return false;
     }) || false;
     
-    if (business.name && business.name.toLowerCase().includes("fyve")) {
-      console.log(`FYVE business duplicate check result: ${business.name} -> ${isDuplicate}`, {
-        searchBusiness: business,
-        savedBusinessesCount: savedBusinessesData?.businesses?.length || 0,
-        totalSavedBusinesses: savedBusinessesData?.total || 0
-      });
-    }
+    // Debug logging removed for production
     
     return { ...business, isDuplicate };
   });
