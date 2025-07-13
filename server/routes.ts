@@ -939,6 +939,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Use Text Search API for all searches - much better coverage and reliability
       const textQuery = `${businessType} in ${location}`;
+      console.log(`Searching for: "${textQuery}"`);
         
         do {
           let url = `${GOOGLE_PLACES_API_URL}/textsearch/json?query=${encodeURIComponent(textQuery)}&key=${googleApiKey}`;
@@ -948,13 +949,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await new Promise(resolve => setTimeout(resolve, 2000));
           }
           
+          console.log(`Making Google Places API call: ${url.replace(googleApiKey, 'HIDDEN_API_KEY')}`);
           const placesResponse = await fetch(url);
           const placesData = await placesResponse.json();
+          
+          console.log(`Google Places API response status: ${placesData.status}`);
+          if (placesData.error_message) {
+            console.log(`Google Places API error: ${placesData.error_message}`);
+          }
           
           if (placesData.status !== "OK" && placesData.status !== "ZERO_RESULTS") {
             return res.status(400).json({ 
               message: "Failed to search businesses",
-              details: placesData.status
+              details: placesData.status,
+              error: placesData.error_message || "Unknown Google Places API error"
             });
           }
           
