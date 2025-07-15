@@ -312,7 +312,7 @@ export default function AccountPortal() {
             </div>
             <div className="flex gap-4 text-sm">
               <div className="flex items-center gap-2">
-                <span>Google Places API:</span>
+                <span>Google API:</span>
                 {apiKeysStatus?.hasGooglePlacesKey ? (
                   <Badge variant="default">Configured</Badge>
                 ) : (
@@ -339,7 +339,6 @@ export default function AccountPortal() {
           </div>
         </CardContent>
       </Card>
-
       {/* Company List */}
       <Card>
         <CardHeader>
