@@ -69,7 +69,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Backend Dependencies
 - Express.js for API server
-- Drizzle ORM for database interactions
+- MongoDB Atlas for persistent user and business data
 - Zod for validation
 - Google Places API for business search
 
