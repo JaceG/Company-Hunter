@@ -106,7 +106,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 
     if (!apiKeysStatus?.hasGooglePlacesKey) {
       toast({
-        title: "Google Places API key required",
+        title: "Google API key required",
         description: "Please set up your API keys first",
         variant: "destructive"
       });

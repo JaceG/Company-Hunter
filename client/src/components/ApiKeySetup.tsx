@@ -74,7 +74,7 @@ export default function ApiKeySetup() {
           API Key Setup
         </CardTitle>
         <CardDescription>
-          Configure your API keys for Google Places and OpenAI services to use all features.
+          Configure your API keys for Google and OpenAI services to use all features.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -95,7 +95,7 @@ export default function ApiKeySetup() {
                     <XCircle className="h-5 w-5 text-red-500" />
                   )}
                   <div>
-                    <p className="font-medium">Google Places API</p>
+                    <p className="font-medium">Google API</p>
                     <p className="text-sm text-gray-600">
                       {apiKeysStatus?.hasGooglePlacesKey ? "Configured" : "Not configured"}
                     </p>
@@ -159,13 +159,13 @@ export default function ApiKeySetup() {
             
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="google-key">Google Places API Key</Label>
+                <Label htmlFor="google-key">Google API Key</Label>
                 <Input
                   id="google-key"
                   type={showKeys ? "text" : "password"}
                   value={googleKey}
                   onChange={(e) => setGoogleKey(e.target.value)}
-                  placeholder="Enter your Google Places API key"
+                  placeholder="Enter your Google API key"
                 />
               </div>
               
@@ -216,7 +216,7 @@ export default function ApiKeySetup() {
           <TabsContent value="instructions" className="space-y-6">
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-semibold mb-3">Google Places API Setup</h3>
+                <h3 className="text-lg font-semibold mb-3">Google API Setup</h3>
                 <div className="space-y-2 text-sm">
                   <p><strong>1. Go to Google Cloud Console:</strong></p>
                   <a 

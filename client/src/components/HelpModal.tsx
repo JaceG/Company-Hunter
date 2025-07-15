@@ -26,7 +26,7 @@ export default function HelpModal({ onClose }: HelpModalProps) {
         <div className="p-6 space-y-4">
           <div>
             <h3 className="font-medium text-secondary mb-2">Getting Started</h3>
-            <p className="text-sm text-gray-600">This tool uses the Google Places API to search for businesses based on your criteria and generate a CSV file with the results.</p>
+            <p className="text-sm text-gray-600">This tool uses the Google API to search for businesses based on your criteria and generate a CSV file with the results.</p>
           </div>
           
           <div>
@@ -50,8 +50,8 @@ export default function HelpModal({ onClose }: HelpModalProps) {
           </div>
           
           <div>
-            <h3 className="font-medium text-secondary mb-2">Google Places API</h3>
-            <p className="text-sm text-gray-600">This application uses the Google Places API to search for business information. Your API key is securely stored and used for these requests.</p>
+            <h3 className="font-medium text-secondary mb-2">Google API</h3>
+            <p className="text-sm text-gray-600">This application uses the Google API to search for business information. Your API key is securely stored and used for these requests.</p>
           </div>
         </div>
         
