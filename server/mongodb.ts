@@ -12,6 +12,8 @@ import {
 	SavedList,
 	ApiKeys,
 	CachedSearchResult,
+	DemoSearch,
+	GuestResult,
 } from '@shared/schema';
 import crypto from 'crypto';
 
@@ -107,6 +109,9 @@ export async function connectToMongoDB(): Promise<Db> {
 				{ guestId: 1, searchFingerprint: 1 },
 				{ unique: true }
 			);
+		await db
+			.collection(COLLECTIONS.GUEST_RESULTS)
+			.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 		return db;
 	} catch (error) {
