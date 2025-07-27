@@ -1352,12 +1352,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 	// API Keys Management
 
-	// Get user's API keys status
-	app.get('/api/auth/api-keys', authenticate, async (req, res) => {
+	// Get user's API keys status or demo mode availability
+	app.get('/api/auth/api-keys', optionalUserOrGuest, async (req, res) => {
 		try {
-			const userId = req.user!.userId;
-			const status = await getApiKeysStatus(userId);
-			res.json(status);
+			if (req.user?.userId) {
+				// Authenticated user - return their API key status
+				const userId = req.user.userId;
+				const status = await getApiKeysStatus(userId);
+				res.json({
+					...status,
+					isDemo: false,
+					demoMode: false,
+				});
+			} else if (req.guest?.guestId) {
+				// Guest user - return demo mode availability
+				const demoAvailable = isDemoModeEnabled();
+				if (demoAvailable) {
+					const quotaStatus = await getDemoSearchStatus(
+						req.guest.guestId
+					);
+					res.json({
+						hasGooglePlacesKey: true, // Demo keys available
+						hasOpenaiKey: true, // Demo keys available
+						hasMongodbUri: true, // Demo keys available
+						isDemo: true,
+						demoMode: true,
+						searchesUsed: quotaStatus.count,
+						searchesRemaining: quotaStatus.remaining,
+						canSearch: quotaStatus.canSearch,
+					});
+				} else {
+					res.json({
+						hasGooglePlacesKey: false,
+						hasOpenaiKey: false,
+						hasMongodbUri: false,
+						isDemo: false,
+						demoMode: false,
+						message: 'Demo mode is currently unavailable',
+					});
+				}
+			} else {
+				// No authentication - still show demo availability
+				const demoAvailable = isDemoModeEnabled();
+				res.json({
+					hasGooglePlacesKey: demoAvailable,
+					hasOpenaiKey: demoAvailable,
+					hasMongodbUri: demoAvailable,
+					isDemo: demoAvailable,
+					demoMode: demoAvailable,
+					message: demoAvailable
+						? 'Demo mode available'
+						: 'Demo mode unavailable',
+				});
+			}
 		} catch (error) {
 			console.error('Error fetching API keys status:', error);
 			res.status(500).json({
