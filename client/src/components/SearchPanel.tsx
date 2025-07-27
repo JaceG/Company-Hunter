@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,7 +18,15 @@ import { useToast } from '@/hooks/use-toast';
 import { useStateSearch, useStateCities } from '@/hooks/useStateSearch';
 import { useApiKeys } from '@/hooks/useApiKeys';
 import { useAuth } from '@/hooks/useAuth';
-import { MapPin, Key, Sparkles, AlertCircle, Search, User } from 'lucide-react';
+import {
+	MapPin,
+	Key,
+	Sparkles,
+	AlertCircle,
+	Search,
+	User,
+	Clock,
+} from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 import QuotaExhaustedModal from './QuotaExhaustedModal';
 
@@ -58,10 +66,58 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 	const [sortBy, setSortBy] = useState<'size' | 'alphabetical'>('size');
 	const [showQuotaModal, setShowQuotaModal] = useState(false);
 
+	// Rate limiting for demo mode
+	const [lastSearchTime, setLastSearchTime] = useState<number>(0);
+	const [searchCooldown, setSearchCooldown] = useState<number>(0);
+
 	const { data: apiKeysStatus } = useApiKeys();
 	const { user, isAuthenticated } = useAuth();
 	const stateSearch = useStateSearch();
 	const stateCities = useStateCities();
+
+	// Rate limiting constants for demo mode
+	const DEMO_SEARCH_COOLDOWN = 3000; // 3 seconds between searches for demo users
+	const RAPID_SEARCH_THRESHOLD = 1000; // 1 second threshold for rapid searches
+
+	// Check if user can perform a search (rate limiting)
+	const canPerformSearch = () => {
+		if (isAuthenticated || !apiKeysStatus?.demoMode) {
+			return true; // No rate limiting for authenticated users
+		}
+
+		const now = Date.now();
+		const timeSinceLastSearch = now - lastSearchTime;
+
+		return timeSinceLastSearch >= DEMO_SEARCH_COOLDOWN;
+	};
+
+	// Update cooldown timer
+	const updateSearchCooldown = () => {
+		if (isAuthenticated || !apiKeysStatus?.demoMode) return;
+
+		const now = Date.now();
+		const timeSinceLastSearch = now - lastSearchTime;
+		const remainingCooldown = Math.max(
+			0,
+			DEMO_SEARCH_COOLDOWN - timeSinceLastSearch
+		);
+
+		setSearchCooldown(remainingCooldown);
+
+		if (remainingCooldown > 0) {
+			const timer = setTimeout(() => {
+				updateSearchCooldown();
+			}, 100);
+			return () => clearTimeout(timer);
+		}
+	};
+
+	// Start cooldown timer when component mounts or lastSearchTime changes
+	useEffect(() => {
+		if (lastSearchTime > 0) {
+			updateSearchCooldown();
+		}
+	}, [lastSearchTime, isAuthenticated, apiKeysStatus?.demoMode]);
 
 	const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const { id, value } = e.target;
@@ -88,6 +144,22 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 			return;
 		}
 
+		// Rate limiting check for demo mode
+		if (
+			!isAuthenticated &&
+			apiKeysStatus?.demoMode &&
+			!canPerformSearch()
+		) {
+			toast({
+				title: 'Search rate limited',
+				description: `Please wait ${Math.ceil(
+					searchCooldown / 1000
+				)} more seconds before searching again`,
+				variant: 'destructive',
+			});
+			return;
+		}
+
 		if (!searchParams.businessType.trim()) {
 			toast({
 				title: 'Business type is required',
@@ -106,6 +178,11 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 			return;
 		}
 
+		// Update last search time for rate limiting
+		if (!isAuthenticated && apiKeysStatus?.demoMode) {
+			setLastSearchTime(Date.now());
+		}
+
 		onSearch(searchParams);
 	};
 
@@ -113,6 +190,22 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 		// Check if demo quota is exhausted
 		if (apiKeysStatus?.demoMode && apiKeysStatus?.searchesRemaining === 0) {
 			setShowQuotaModal(true);
+			return;
+		}
+
+		// Rate limiting check for demo mode
+		if (
+			!isAuthenticated &&
+			apiKeysStatus?.demoMode &&
+			!canPerformSearch()
+		) {
+			toast({
+				title: 'Search rate limited',
+				description: `Please wait ${Math.ceil(
+					searchCooldown / 1000
+				)} more seconds before searching again`,
+				variant: 'destructive',
+			});
 			return;
 		}
 
@@ -141,6 +234,11 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 				variant: 'destructive',
 			});
 			return;
+		}
+
+		// Update last search time for rate limiting
+		if (!isAuthenticated && apiKeysStatus?.demoMode) {
+			setLastSearchTime(Date.now());
 		}
 
 		try {
@@ -417,6 +515,43 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 					</Alert>
 				)}
 
+				{/* Rate Limiting Alert for Demo Mode */}
+				{!isAuthenticated &&
+					apiKeysStatus?.demoMode &&
+					searchCooldown > 0 && (
+						<Alert className='mb-4 bg-orange-50 border-orange-200'>
+							<Clock className='h-4 w-4 text-orange-600' />
+							<AlertDescription className='text-sm text-orange-800'>
+								<div className='flex items-center justify-between'>
+									<div>
+										<span className='font-medium'>
+											Search cooldown active
+										</span>{' '}
+										- Please wait{' '}
+										{Math.ceil(searchCooldown / 1000)}{' '}
+										seconds before searching again
+									</div>
+									<div className='w-16 bg-orange-200 rounded-full h-2'>
+										<div
+											className='bg-orange-600 h-2 rounded-full transition-all duration-100'
+											style={{
+												width: `${
+													((DEMO_SEARCH_COOLDOWN -
+														searchCooldown) /
+														DEMO_SEARCH_COOLDOWN) *
+													100
+												}%`,
+											}}></div>
+									</div>
+								</div>
+								<div className='mt-1 text-xs text-orange-700'>
+									This helps prevent abuse and ensures fair
+									usage for all demo users
+								</div>
+							</AlertDescription>
+						</Alert>
+					)}
+
 				{/* Authenticated User Status */}
 				{isAuthenticated &&
 					apiKeysStatus &&
@@ -528,11 +663,20 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 								disabled={
 									isLoading ||
 									(!apiKeysStatus?.hasGooglePlacesKey &&
-										!apiKeysStatus?.demoMode)
+										!apiKeysStatus?.demoMode) ||
+									(!isAuthenticated &&
+										apiKeysStatus?.demoMode &&
+										searchCooldown > 0)
 								}
 								className='w-full'>
 								{isLoading
 									? 'Searching...'
+									: !isAuthenticated &&
+									  apiKeysStatus?.demoMode &&
+									  searchCooldown > 0
+									? `Wait ${Math.ceil(
+											searchCooldown / 1000
+									  )}s...`
 									: apiKeysStatus?.demoMode &&
 									  apiKeysStatus?.searchesRemaining === 0
 									? 'Quota Exhausted - Sign Up!'
@@ -778,11 +922,20 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 									stateSearch.isPending ||
 									(!apiKeysStatus?.hasGooglePlacesKey &&
 										!apiKeysStatus?.demoMode) ||
-									selectedCities.length === 0
+									selectedCities.length === 0 ||
+									(!isAuthenticated &&
+										apiKeysStatus?.demoMode &&
+										searchCooldown > 0)
 								}
 								className='w-full'>
 								{stateSearch.isPending
 									? 'Searching...'
+									: !isAuthenticated &&
+									  apiKeysStatus?.demoMode &&
+									  searchCooldown > 0
+									? `Wait ${Math.ceil(
+											searchCooldown / 1000
+									  )}s...`
 									: apiKeysStatus?.demoMode &&
 									  apiKeysStatus?.searchesRemaining === 0
 									? 'Quota Exhausted - Sign Up!'
