@@ -24,7 +24,7 @@ CompanyHunter is a comprehensive business search application that helps users fi
 Create a `.env` file in the root directory with the following variables:
 
 ```bash
-# MongoDB Configuration (Required)
+# MongoDB Configuration for User Management (Required)
 MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/businessSearchApp?retryWrites=true&w=majority
 
 # Alternative (if using DATABASE_URL instead)
@@ -33,9 +33,8 @@ MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/businessSearchAp
 # JWT Secret (Optional - will use default if not provided)
 JWT_SECRET=your-custom-jwt-secret-here
 
-# Server-level API Keys (Optional - users can provide their own)
-GOOGLE_PLACES_API_KEY=your-google-places-api-key
-OPENAI_API_KEY=your-openai-api-key
+# Note: API keys are no longer supported as environment variables
+# All users must provide their own Google Places, OpenAI, and MongoDB Atlas keys
 ```
 
 ## MongoDB Atlas Setup
@@ -118,25 +117,25 @@ npm start
 
 ## API Key Management System
 
-The application supports a flexible two-level API key configuration:
+The application requires users to provide ALL their own API keys with **no fallbacks** to environment variables:
 
-### Server-Level Keys (Optional)
-- Set `GOOGLE_PLACES_API_KEY` and `OPENAI_API_KEY` in environment variables
-- All users will see these APIs as "configured" and can use them immediately
-- Good for hosted deployments where you want to provide API access to all users
-- System keys are used as fallback when users don't provide their own
+### Required User API Keys
+- **Google Places API Key** - Required for all business searches
+- **OpenAI API Key** - Required for AI-powered search features  
+- **MongoDB Atlas URI** - Required for data storage (users provide their own database)
 
-### User-Level Keys (Recommended)
-- Individual users can add their own API keys through the Account Portal
-- **User keys take priority over server keys**
-- Users can manage their keys independently in the application
-- Provides better privacy and individual usage control
-- Allows users to monitor their own API costs
+### No Environment Variable Fallbacks
+- The application will **NOT** use any server-level API keys as fallbacks
+- All users must configure their own complete set of API keys
+- If any required API key is missing, the respective features will not work
+- Authentication is required - users must register/login to use any search features
 
-### No API Keys Configured
-- Users will see setup instructions and cannot use search features
-- The app provides guided setup instructions for both Google and OpenAI APIs
-- Clear cost estimates are shown during setup
+### User-Level Keys (Required)
+- All users must provide their own API keys through the Account Portal
+- All three API keys are mandatory for the application to function
+- Users manage their own API costs and usage limits
+- Each user's data is stored in their own MongoDB Atlas database
+- Complete privacy and individual usage control
 
 ## Features
 
@@ -226,12 +225,136 @@ The application creates the following MongoDB collections:
 
 ## Security Considerations
 
-- **Never commit sensitive data**: API keys and connection strings should only be in environment variables
-- **Use strong passwords**: For both user accounts and MongoDB Atlas
-- **Rotate credentials regularly**: Change API keys and database passwords periodically
-- **Rate limiting**: Consider implementing additional rate limiting for production deployments
-- **HTTPS in production**: Always use HTTPS for production deployments
-- **IP restrictions**: Configure Google API key restrictions and MongoDB network access appropriately
+**Current Security Status**: The application has basic security but needs immediate enhancements for production use.
+
+### **✅ Security Features Already Implemented**
+- **JWT Authentication**: 7-day tokens with proper verification
+- **Password Security**: bcrypt hashing with 10 salt rounds  
+- **Input Validation**: Zod schemas for all API endpoints
+- **User Data Isolation**: Proper userId-based access control
+- **API Key Privacy**: Keys never returned in responses
+- **NoSQL Injection Protection**: Proper ObjectId usage
+
+### **⚠️ IMMEDIATE Security Fixes Needed**
+
+#### **1. Request Size Limits (Current: VULNERABLE)**
+```typescript
+// Current - No limits
+app.use(express.json());
+
+// Should be
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+```
+
+#### **2. CORS Configuration (Current: MISSING)**
+```typescript
+// Add CORS headers for production
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://yourdomain.com'] 
+    : ['http://localhost:3000', 'http://localhost:5000'],
+  credentials: true
+}));
+```
+
+#### **3. Security Headers (Current: MISSING)**
+```typescript
+// Add helmet middleware
+npm install helmet
+app.use(helmet());
+```
+
+#### **4. Rate Limiting (Current: MISSING)**
+```typescript
+// Add rate limiting
+npm install express-rate-limit
+const rateLimit = require('express-rate-limit');
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
+});
+app.use('/api/', limiter);
+```
+
+### **📋 Medium Priority Security Enhancements**
+
+#### **API Key Encryption**
+- **Current**: API keys stored as plain text in MongoDB
+- **Recommendation**: Encrypt API keys at rest using crypto module
+- **Risk**: Database compromise exposes all user API keys
+
+#### **Input Sanitization**
+- **Current**: Limited validation on API keys and search terms
+- **Recommendation**: Add content validation for API keys
+- **Implementation**: Validate API key formats before storage
+
+#### **Environment Variables**
+- **Current**: Weak default JWT secret (`'business-search-token-secret-2025'`)
+- **Recommendation**: Require strong JWT_SECRET in production
+- **Implementation**: Fail to start if no JWT_SECRET provided in production
+
+### **🔒 Production Security Checklist**
+
+Before deploying to production:
+
+- [ ] **Install Security Packages**
+  ```bash
+  npm install helmet cors express-rate-limit
+  ```
+
+- [ ] **Set Strong Environment Variables**
+  ```bash
+  JWT_SECRET=generate-strong-random-secret-here
+  CLIENT_URL=https://yourdomain.com
+  NODE_ENV=production
+  ```
+
+- [ ] **Configure MongoDB Network Access**
+  - Restrict to specific IP addresses only
+  - Use strong database passwords
+  - Enable MongoDB Atlas encryption at rest
+
+- [ ] **Enable HTTPS**
+  - Use SSL/TLS certificates
+  - Redirect HTTP to HTTPS
+  - Configure secure cookie settings
+
+- [ ] **Set Up Monitoring**
+  - Log security events
+  - Monitor failed login attempts
+  - Track API usage patterns
+
+### **🚨 Current Risk Assessment**
+
+**HIGH RISK**: 
+- No rate limiting (vulnerable to DoS attacks)
+- Missing CORS (vulnerable to CSRF attacks)
+- No request size limits (vulnerable to large payload attacks)
+
+**MEDIUM RISK**:
+- Plain text API key storage
+- Weak default JWT secret
+- Missing input sanitization
+
+**LOW RISK**:
+- Error information leakage (development only)
+- Missing some security headers
+
+### **🛡️ Recommended Security Dependencies**
+
+Add these packages for enhanced security:
+```bash
+npm install --save helmet cors express-rate-limit express-validator
+```
+
+### **Implementation Priority**
+
+1. **Week 1**: Request limits, CORS, basic security headers
+2. **Week 2**: Rate limiting, input validation
+3. **Week 3**: API key encryption, monitoring
+4. **Week 4**: Security testing and documentation
 
 ## Support & Development
 
@@ -260,3 +383,12 @@ For technical issues:
 ---
 
 **Note**: This application is designed for business lead generation and research purposes. Please ensure compliance with Google Places API terms of service and applicable data protection regulations in your jurisdiction.
+
+### **Additional Security Best Practices**
+
+- **Never commit sensitive data**: All API keys and connection strings must be in environment variables only
+- **Use strong passwords**: For both user accounts and MongoDB Atlas (minimum 12 characters)  
+- **Rotate credentials regularly**: Change API keys and database passwords every 90 days
+- **Monitor access**: Regularly review MongoDB Atlas access logs and API usage patterns
+- **Backup security**: Ensure MongoDB Atlas backups are encrypted and access-controlled
+- **Update dependencies**: Run `npm audit` regularly and keep dependencies updated

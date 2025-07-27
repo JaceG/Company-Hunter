@@ -1,28 +1,40 @@
 import { MongoClient, Db, ObjectId } from 'mongodb';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { User, UserCreate, SavedBusiness, SavedList, ApiKeys, CachedSearchResult } from '@shared/schema';
+import {
+	User,
+	UserCreate,
+	SavedBusiness,
+	SavedList,
+	ApiKeys,
+	CachedSearchResult,
+} from '@shared/schema';
 import crypto from 'crypto';
 
 // MongoDB connection string - REQUIRED for application to function
 const MONGODB_URI = process.env.MONGODB_URI || process.env.DATABASE_URL;
-const JWT_SECRET = process.env.JWT_SECRET || 'business-search-token-secret-2025';
+const JWT_SECRET =
+	process.env.JWT_SECRET || 'business-search-token-secret-2025';
 
 if (!MONGODB_URI) {
-  console.error('MongoDB connection string not found.');
-  console.error('Please set MONGODB_URI or DATABASE_URL environment variable.');
-  console.error('Example: MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/database');
-  throw new Error('MongoDB connection string required');
+	console.error('MongoDB connection string not found.');
+	console.error(
+		'Please set MONGODB_URI or DATABASE_URL environment variable.'
+	);
+	console.error(
+		'Example: MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/database'
+	);
+	throw new Error('MongoDB connection string required');
 }
 
 // Database and collection names
 const DB_NAME = 'businessSearchApp';
 const COLLECTIONS = {
-  USERS: 'users',
-  SAVED_BUSINESSES: 'savedBusinesses',
-  SAVED_LISTS: 'savedLists',
-  API_KEYS: 'apiKeys',
-  CACHED_SEARCHES: 'cachedSearches'
+	USERS: 'users',
+	SAVED_BUSINESSES: 'savedBusinesses',
+	SAVED_LISTS: 'savedLists',
+	API_KEYS: 'apiKeys',
+	CACHED_SEARCHES: 'cachedSearches',
 };
 
 // MongoDB connection client
@@ -31,843 +43,1003 @@ let db: Db | null = null;
 
 // Initialize MongoDB connection
 export async function connectToMongoDB(): Promise<Db> {
-  if (db) return db;
+	if (db) return db;
 
-  try {
-    client = await MongoClient.connect(MONGODB_URI);
-    db = client.db(DB_NAME);
-    console.log('Connected to MongoDB Atlas');
-    
-    // Create indexes for better performance
-    await db.collection(COLLECTIONS.USERS).createIndex({ email: 1 }, { unique: true });
-    await db.collection(COLLECTIONS.SAVED_BUSINESSES).createIndex({ userId: 1 });
-    await db.collection(COLLECTIONS.SAVED_LISTS).createIndex({ userId: 1 });
-    await db.collection(COLLECTIONS.API_KEYS).createIndex({ userId: 1 }, { unique: true });
-    await db.collection(COLLECTIONS.CACHED_SEARCHES).createIndex({ searchFingerprint: 1 }, { unique: true });
-    await db.collection(COLLECTIONS.CACHED_SEARCHES).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-    
-    return db;
-  } catch (error) {
-    console.error('MongoDB connection error:', error);
-    throw error;
-  }
+	try {
+		client = await MongoClient.connect(MONGODB_URI);
+		db = client.db(DB_NAME);
+		console.log('Connected to MongoDB Atlas');
+
+		// Create indexes for better performance
+		await db
+			.collection(COLLECTIONS.USERS)
+			.createIndex({ email: 1 }, { unique: true });
+		await db
+			.collection(COLLECTIONS.SAVED_BUSINESSES)
+			.createIndex({ userId: 1 });
+		await db.collection(COLLECTIONS.SAVED_LISTS).createIndex({ userId: 1 });
+		await db
+			.collection(COLLECTIONS.API_KEYS)
+			.createIndex({ userId: 1 }, { unique: true });
+		await db
+			.collection(COLLECTIONS.CACHED_SEARCHES)
+			.createIndex({ searchFingerprint: 1 }, { unique: true });
+		await db
+			.collection(COLLECTIONS.CACHED_SEARCHES)
+			.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+		return db;
+	} catch (error) {
+		console.error('MongoDB connection error:', error);
+		throw error;
+	}
 }
 
 // Close MongoDB connection
 export async function closeMongoDBConnection() {
-  if (client) {
-    await client.close();
-    console.log('MongoDB connection closed');
-    client = null;
-    db = null;
-  }
+	if (client) {
+		await client.close();
+		console.log('MongoDB connection closed');
+		client = null;
+		db = null;
+	}
 }
 
 // User Management Functions
-export async function createUser(userData: UserCreate): Promise<{ user: User; token: string }> {
-  const database = await connectToMongoDB();
-  const usersCollection = database.collection<User>(COLLECTIONS.USERS);
+export async function createUser(
+	userData: UserCreate
+): Promise<{ user: User; token: string }> {
+	const database = await connectToMongoDB();
+	const usersCollection = database.collection<User>(COLLECTIONS.USERS);
 
-  // Check if user already exists
-  const existingUser = await usersCollection.findOne({ email: userData.email });
-  if (existingUser) {
-    throw new Error('Email already registered');
-  }
+	// Check if user already exists
+	const existingUser = await usersCollection.findOne({
+		email: userData.email,
+	});
+	if (existingUser) {
+		throw new Error('Email already registered');
+	}
 
-  // Hash the password
-  const saltRounds = 10;
-  const hashedPassword = await bcrypt.hash(userData.password, saltRounds);
+	// Hash the password
+	const saltRounds = 10;
+	const hashedPassword = await bcrypt.hash(userData.password, saltRounds);
 
-  // Create new user
-  const newUser: User = {
-    email: userData.email,
-    password: hashedPassword,
-    name: userData.name || '',
-    createdAt: new Date(),
-    updatedAt: new Date()
-  };
+	// Create new user
+	const newUser: User = {
+		email: userData.email,
+		password: hashedPassword,
+		name: userData.name || '',
+		createdAt: new Date(),
+		updatedAt: new Date(),
+	};
 
-  // Insert user into database
-  const result = await usersCollection.insertOne(newUser);
-  
-  // Create JWT token
-  const token = jwt.sign(
-    { userId: result.insertedId.toString(), email: newUser.email },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  );
+	// Insert user into database
+	const result = await usersCollection.insertOne(newUser);
 
-  // Return user (excluding password) and token
-  const { password, ...userWithoutPassword } = newUser;
-  return { 
-    user: { ...userWithoutPassword, _id: result.insertedId.toString() } as User, 
-    token 
-  };
+	// Create JWT token
+	const token = jwt.sign(
+		{ userId: result.insertedId.toString(), email: newUser.email },
+		JWT_SECRET,
+		{ expiresIn: '7d' }
+	);
+
+	// Return user (excluding password) and token
+	const { password, ...userWithoutPassword } = newUser;
+	return {
+		user: {
+			...userWithoutPassword,
+			_id: result.insertedId.toString(),
+		} as User,
+		token,
+	};
 }
 
-export async function loginUser(email: string, password: string): Promise<{ user: User; token: string }> {
-  const database = await connectToMongoDB();
-  const usersCollection = database.collection<User>(COLLECTIONS.USERS);
+export async function loginUser(
+	email: string,
+	password: string
+): Promise<{ user: User; token: string }> {
+	const database = await connectToMongoDB();
+	const usersCollection = database.collection<User>(COLLECTIONS.USERS);
 
-  // Find user by email
-  const user = await usersCollection.findOne({ email });
-  if (!user) {
-    throw new Error('User not found');
-  }
+	// Find user by email
+	const user = await usersCollection.findOne({ email });
+	if (!user) {
+		throw new Error('User not found');
+	}
 
-  // Compare passwords
-  const isPasswordValid = await bcrypt.compare(password, user.password);
-  if (!isPasswordValid) {
-    throw new Error('Invalid credentials');
-  }
+	// Compare passwords
+	const isPasswordValid = await bcrypt.compare(password, user.password);
+	if (!isPasswordValid) {
+		throw new Error('Invalid credentials');
+	}
 
-  // Create JWT token
-  const token = jwt.sign(
-    { userId: user._id!.toString(), email: user.email },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  );
+	// Create JWT token
+	const token = jwt.sign(
+		{ userId: user._id!.toString(), email: user.email },
+		JWT_SECRET,
+		{ expiresIn: '7d' }
+	);
 
-  // Return user (excluding password) and token
-  const { password: _, ...userWithoutPassword } = user;
-  return { user: userWithoutPassword as User, token };
+	// Return user (excluding password) and token
+	const { password: _, ...userWithoutPassword } = user;
+	return { user: userWithoutPassword as User, token };
 }
 
 export function verifyToken(token: string): { userId: string; email: string } {
-  try {
-    return jwt.verify(token, JWT_SECRET) as { userId: string; email: string };
-  } catch (error) {
-    throw new Error('Invalid or expired token');
-  }
+	try {
+		return jwt.verify(token, JWT_SECRET) as {
+			userId: string;
+			email: string;
+		};
+	} catch (error) {
+		throw new Error('Invalid or expired token');
+	}
 }
 
 // Saved Business Functions
-export async function saveBusiness(business: SavedBusiness): Promise<SavedBusiness> {
-  const database = await connectToMongoDB();
-  const businessCollection = database.collection<SavedBusiness>(COLLECTIONS.SAVED_BUSINESSES);
+export async function saveBusiness(
+	business: SavedBusiness
+): Promise<SavedBusiness> {
+	const database = await connectToMongoDB();
+	const businessCollection = database.collection<SavedBusiness>(
+		COLLECTIONS.SAVED_BUSINESSES
+	);
 
-  // Add timestamps
-  const businessWithTimestamps = {
-    ...business,
-    createdAt: new Date(),
-    updatedAt: new Date()
-  };
+	// Add timestamps
+	const businessWithTimestamps = {
+		...business,
+		createdAt: new Date(),
+		updatedAt: new Date(),
+	};
 
-  // Insert business
-  const result = await businessCollection.insertOne(businessWithTimestamps);
-  return { ...businessWithTimestamps, _id: result.insertedId.toString() };
+	// Insert business
+	const result = await businessCollection.insertOne(businessWithTimestamps);
+	return { ...businessWithTimestamps, _id: result.insertedId.toString() };
 }
 
-export async function getSavedBusinesses(userId: string, page: number = 1, limit: number = 50, searchTerm?: string): Promise<{businesses: SavedBusiness[], total: number, page: number, totalPages: number}> {
-  const database = await connectToMongoDB();
-  const businessCollection = database.collection<SavedBusiness>(COLLECTIONS.SAVED_BUSINESSES);
+export async function getSavedBusinesses(
+	userId: string,
+	page: number = 1,
+	limit: number = 50,
+	searchTerm?: string
+): Promise<{
+	businesses: SavedBusiness[];
+	total: number;
+	page: number;
+	totalPages: number;
+}> {
+	const database = await connectToMongoDB();
+	const businessCollection = database.collection<SavedBusiness>(
+		COLLECTIONS.SAVED_BUSINESSES
+	);
 
-  const skip = (page - 1) * limit;
-  
-  // Build search filter
-  let filter: any = { userId };
-  if (searchTerm && searchTerm.trim()) {
-    const searchRegex = new RegExp(searchTerm.trim(), 'i');
-    filter.$or = [
-      { name: { $regex: searchRegex } },
-      { website: { $regex: searchRegex } },
-      { location: { $regex: searchRegex } }
-    ];
-  }
-  
-  // Get total count for pagination with search filter
-  const total = await businessCollection.countDocuments(filter);
-  const totalPages = Math.ceil(total / limit);
-  
-  // Find all businesses for this user with pagination and search
-  const businesses = await businessCollection
-    .find(filter)
-    .sort({ name: 1 })
-    .skip(skip)
-    .limit(limit)
-    .toArray();
-    
-  return {
-    businesses: businesses.map(b => ({
-      ...b,
-      _id: b._id!.toString()
-    })),
-    total,
-    page,
-    totalPages
-  };
+	const skip = (page - 1) * limit;
+
+	// Build search filter
+	let filter: any = { userId };
+	if (searchTerm && searchTerm.trim()) {
+		const searchRegex = new RegExp(searchTerm.trim(), 'i');
+		filter.$or = [
+			{ name: { $regex: searchRegex } },
+			{ website: { $regex: searchRegex } },
+			{ location: { $regex: searchRegex } },
+		];
+	}
+
+	// Get total count for pagination with search filter
+	const total = await businessCollection.countDocuments(filter);
+	const totalPages = Math.ceil(total / limit);
+
+	// Find all businesses for this user with pagination and search
+	const businesses = await businessCollection
+		.find(filter)
+		.sort({ name: 1 })
+		.skip(skip)
+		.limit(limit)
+		.toArray();
+
+	return {
+		businesses: businesses.map((b) => ({
+			...b,
+			_id: b._id!.toString(),
+		})),
+		total,
+		page,
+		totalPages,
+	};
 }
 
-export async function getSavedBusinessById(id: string): Promise<SavedBusiness | null> {
-  const database = await connectToMongoDB();
-  const businessCollection = database.collection(COLLECTIONS.SAVED_BUSINESSES);
+export async function getSavedBusinessById(
+	id: string
+): Promise<SavedBusiness | null> {
+	const database = await connectToMongoDB();
+	const businessCollection = database.collection(
+		COLLECTIONS.SAVED_BUSINESSES
+	);
 
-  try {
-    // Find business by ID - converting string ID to MongoDB ObjectId
-    const business = await businessCollection.findOne({ 
-      _id: new ObjectId(id) 
-    }) as SavedBusiness | null;
-    if (!business) return null;
+	try {
+		// Find business by ID - converting string ID to MongoDB ObjectId
+		const business = (await businessCollection.findOne({
+			_id: new ObjectId(id),
+		})) as SavedBusiness | null;
+		if (!business) return null;
 
-    return {
-      ...business,
-      _id: business._id!.toString()
-    };
-  } catch (error) {
-    console.error(`Error getting business by ID ${id}:`, error);
-    return null;
-  }
+		return {
+			...business,
+			_id: business._id!.toString(),
+		};
+	} catch (error) {
+		console.error(`Error getting business by ID ${id}:`, error);
+		return null;
+	}
 }
 
-export async function updateSavedBusiness(id: string, updates: Partial<SavedBusiness>): Promise<SavedBusiness | null> {
-  const database = await connectToMongoDB();
-  const businessCollection = database.collection<SavedBusiness>(COLLECTIONS.SAVED_BUSINESSES);
+export async function updateSavedBusiness(
+	id: string,
+	updates: Partial<SavedBusiness>
+): Promise<SavedBusiness | null> {
+	const database = await connectToMongoDB();
+	const businessCollection = database.collection<SavedBusiness>(
+		COLLECTIONS.SAVED_BUSINESSES
+	);
 
-  // Make sure userId cannot be changed
-  const { userId, _id, ...updateData } = updates;
+	// Make sure userId cannot be changed
+	const { userId, _id, ...updateData } = updates;
 
-  try {
-    // Use type assertion to handle MongoDB typing issues with ObjectId
-    const filter = { _id: new ObjectId(id) } as any;
-    
-    // Update business
-    const result = await businessCollection.findOneAndUpdate(
-      filter,
-      { 
-        $set: { 
-          ...updateData,
-          updatedAt: new Date()
-        } 
-      },
-      { returnDocument: 'after' }
-    ) as any;
+	try {
+		// Use type assertion to handle MongoDB typing issues with ObjectId
+		const filter = { _id: new ObjectId(id) } as any;
 
-    if (!result) return null;
+		// Update business
+		const result = (await businessCollection.findOneAndUpdate(
+			filter,
+			{
+				$set: {
+					...updateData,
+					updatedAt: new Date(),
+				},
+			},
+			{ returnDocument: 'after' }
+		)) as any;
 
-    return {
-      ...result,
-      _id: result._id!.toString()
-    };
-  } catch (error) {
-    console.error(`Error updating business ${id}:`, error);
-    return null;
-  }
+		if (!result) return null;
+
+		return {
+			...result,
+			_id: result._id!.toString(),
+		};
+	} catch (error) {
+		console.error(`Error updating business ${id}:`, error);
+		return null;
+	}
 }
 
 export async function deleteSavedBusiness(id: string): Promise<boolean> {
-  const database = await connectToMongoDB();
-  const businessCollection = database.collection<SavedBusiness>(COLLECTIONS.SAVED_BUSINESSES);
+	const database = await connectToMongoDB();
+	const businessCollection = database.collection<SavedBusiness>(
+		COLLECTIONS.SAVED_BUSINESSES
+	);
 
-  try {
-    // Delete business
-    const result = await businessCollection.deleteOne({ _id: new ObjectId(id) });
-    return result.deletedCount > 0;
-  } catch (error) {
-    console.error(`Error deleting business ${id}:`, error);
-    return false;
-  }
+	try {
+		// Delete business
+		const result = await businessCollection.deleteOne({
+			_id: new ObjectId(id),
+		});
+		return result.deletedCount > 0;
+	} catch (error) {
+		console.error(`Error deleting business ${id}:`, error);
+		return false;
+	}
 }
 
-export async function deleteAllSavedBusinesses(userId: string): Promise<number> {
-  const database = await connectToMongoDB();
-  const businessCollection = database.collection<SavedBusiness>(COLLECTIONS.SAVED_BUSINESSES);
+export async function deleteAllSavedBusinesses(
+	userId: string
+): Promise<number> {
+	const database = await connectToMongoDB();
+	const businessCollection = database.collection<SavedBusiness>(
+		COLLECTIONS.SAVED_BUSINESSES
+	);
 
-  try {
-    // Delete all businesses for this user
-    const result = await businessCollection.deleteMany({ userId });
-    return result.deletedCount || 0;
-  } catch (error) {
-    console.error(`Error deleting all businesses for user ${userId}:`, error);
-    return 0;
-  }
+	try {
+		// Delete all businesses for this user
+		const result = await businessCollection.deleteMany({ userId });
+		return result.deletedCount || 0;
+	} catch (error) {
+		console.error(
+			`Error deleting all businesses for user ${userId}:`,
+			error
+		);
+		return 0;
+	}
 }
 
 // Saved Lists Functions
 export async function createSavedList(list: SavedList): Promise<SavedList> {
-  const database = await connectToMongoDB();
-  const listCollection = database.collection<SavedList>(COLLECTIONS.SAVED_LISTS);
+	const database = await connectToMongoDB();
+	const listCollection = database.collection<SavedList>(
+		COLLECTIONS.SAVED_LISTS
+	);
 
-  // Add timestamps
-  const listWithTimestamps = {
-    ...list,
-    createdAt: new Date(),
-    updatedAt: new Date()
-  };
+	// Add timestamps
+	const listWithTimestamps = {
+		...list,
+		createdAt: new Date(),
+		updatedAt: new Date(),
+	};
 
-  // Insert list
-  const result = await listCollection.insertOne(listWithTimestamps);
-  return { ...listWithTimestamps, _id: result.insertedId.toString() };
+	// Insert list
+	const result = await listCollection.insertOne(listWithTimestamps);
+	return { ...listWithTimestamps, _id: result.insertedId.toString() };
 }
 
 export async function getSavedLists(userId: string): Promise<SavedList[]> {
-  const database = await connectToMongoDB();
-  const listCollection = database.collection<SavedList>(COLLECTIONS.SAVED_LISTS);
+	const database = await connectToMongoDB();
+	const listCollection = database.collection<SavedList>(
+		COLLECTIONS.SAVED_LISTS
+	);
 
-  // Find all lists for this user
-  const lists = await listCollection.find({ userId }).toArray();
-  return lists.map(l => ({
-    ...l,
-    _id: l._id!.toString()
-  }));
+	// Find all lists for this user
+	const lists = await listCollection.find({ userId }).toArray();
+	return lists.map((l) => ({
+		...l,
+		_id: l._id!.toString(),
+	}));
 }
 
 export async function getSavedListById(id: string): Promise<SavedList | null> {
-  const database = await connectToMongoDB();
-  const listCollection = database.collection<SavedList>(COLLECTIONS.SAVED_LISTS);
+	const database = await connectToMongoDB();
+	const listCollection = database.collection<SavedList>(
+		COLLECTIONS.SAVED_LISTS
+	);
 
-  try {
-    // Find list by ID
-    const list = await listCollection.findOne({ _id: new ObjectId(id) });
-    if (!list) return null;
+	try {
+		// Find list by ID
+		const list = await listCollection.findOne({ _id: new ObjectId(id) });
+		if (!list) return null;
 
-    return {
-      ...list,
-      _id: list._id!.toString()
-    };
-  } catch (error) {
-    console.error(`Error getting list by ID ${id}:`, error);
-    return null;
-  }
+		return {
+			...list,
+			_id: list._id!.toString(),
+		};
+	} catch (error) {
+		console.error(`Error getting list by ID ${id}:`, error);
+		return null;
+	}
 }
 
-export async function updateSavedList(id: string, updates: Partial<SavedList>): Promise<SavedList | null> {
-  const database = await connectToMongoDB();
-  const listCollection = database.collection<SavedList>(COLLECTIONS.SAVED_LISTS);
+export async function updateSavedList(
+	id: string,
+	updates: Partial<SavedList>
+): Promise<SavedList | null> {
+	const database = await connectToMongoDB();
+	const listCollection = database.collection<SavedList>(
+		COLLECTIONS.SAVED_LISTS
+	);
 
-  // Make sure userId cannot be changed
-  const { userId, _id, ...updateData } = updates;
+	// Make sure userId cannot be changed
+	const { userId, _id, ...updateData } = updates;
 
-  try {
-    // Update list
-    const result = await listCollection.findOneAndUpdate(
-      { _id: new ObjectId(id) },
-      { 
-        $set: { 
-          ...updateData,
-          updatedAt: new Date() 
-        } 
-      },
-      { returnDocument: 'after' }
-    );
+	try {
+		// Update list
+		const result = await listCollection.findOneAndUpdate(
+			{ _id: new ObjectId(id) },
+			{
+				$set: {
+					...updateData,
+					updatedAt: new Date(),
+				},
+			},
+			{ returnDocument: 'after' }
+		);
 
-    if (!result) return null;
+		if (!result) return null;
 
-    return {
-      ...result,
-      _id: result._id!.toString()
-    };
-  } catch (error) {
-    console.error(`Error updating list ${id}:`, error);
-    return null;
-  }
+		return {
+			...result,
+			_id: result._id!.toString(),
+		};
+	} catch (error) {
+		console.error(`Error updating list ${id}:`, error);
+		return null;
+	}
 }
 
 export async function deleteSavedList(id: string): Promise<boolean> {
-  const database = await connectToMongoDB();
-  const listCollection = database.collection<SavedList>(COLLECTIONS.SAVED_LISTS);
+	const database = await connectToMongoDB();
+	const listCollection = database.collection<SavedList>(
+		COLLECTIONS.SAVED_LISTS
+	);
 
-  try {
-    // Delete list
-    const result = await listCollection.deleteOne({ _id: new ObjectId(id) });
-    return result.deletedCount > 0;
-  } catch (error) {
-    console.error(`Error deleting list ${id}:`, error);
-    return false;
-  }
+	try {
+		// Delete list
+		const result = await listCollection.deleteOne({
+			_id: new ObjectId(id),
+		});
+		return result.deletedCount > 0;
+	} catch (error) {
+		console.error(`Error deleting list ${id}:`, error);
+		return false;
+	}
 }
 
-export async function addBusinessToList(listId: string, businessId: string): Promise<SavedList | null> {
-  const database = await connectToMongoDB();
-  const listCollection = database.collection<SavedList>(COLLECTIONS.SAVED_LISTS);
+export async function addBusinessToList(
+	listId: string,
+	businessId: string
+): Promise<SavedList | null> {
+	const database = await connectToMongoDB();
+	const listCollection = database.collection<SavedList>(
+		COLLECTIONS.SAVED_LISTS
+	);
 
-  try {
-    // Add business to list
-    const result = await listCollection.findOneAndUpdate(
-      { _id: new ObjectId(listId) },
-      { 
-        $addToSet: { businesses: businessId },
-        $set: { updatedAt: new Date() }
-      },
-      { returnDocument: 'after' }
-    );
+	try {
+		// Add business to list
+		const result = await listCollection.findOneAndUpdate(
+			{ _id: new ObjectId(listId) },
+			{
+				$addToSet: { businesses: businessId },
+				$set: { updatedAt: new Date() },
+			},
+			{ returnDocument: 'after' }
+		);
 
-    if (!result) return null;
+		if (!result) return null;
 
-    return {
-      ...result,
-      _id: result._id!.toString()
-    };
-  } catch (error) {
-    console.error(`Error adding business ${businessId} to list ${listId}:`, error);
-    return null;
-  }
+		return {
+			...result,
+			_id: result._id!.toString(),
+		};
+	} catch (error) {
+		console.error(
+			`Error adding business ${businessId} to list ${listId}:`,
+			error
+		);
+		return null;
+	}
 }
 
-export async function removeBusinessFromList(listId: string, businessId: string): Promise<SavedList | null> {
-  const database = await connectToMongoDB();
-  const listCollection = database.collection<SavedList>(COLLECTIONS.SAVED_LISTS);
+export async function removeBusinessFromList(
+	listId: string,
+	businessId: string
+): Promise<SavedList | null> {
+	const database = await connectToMongoDB();
+	const listCollection = database.collection<SavedList>(
+		COLLECTIONS.SAVED_LISTS
+	);
 
-  try {
-    // Remove business from list
-    const result = await listCollection.findOneAndUpdate(
-      { _id: new ObjectId(listId) },
-      { 
-        $pull: { businesses: businessId },
-        $set: { updatedAt: new Date() }
-      },
-      { returnDocument: 'after' }
-    );
+	try {
+		// Remove business from list
+		const result = await listCollection.findOneAndUpdate(
+			{ _id: new ObjectId(listId) },
+			{
+				$pull: { businesses: businessId },
+				$set: { updatedAt: new Date() },
+			},
+			{ returnDocument: 'after' }
+		);
 
-    if (!result) return null;
+		if (!result) return null;
 
-    return {
-      ...result,
-      _id: result._id!.toString()
-    };
-  } catch (error) {
-    console.error(`Error removing business ${businessId} from list ${listId}:`, error);
-    return null;
-  }
+		return {
+			...result,
+			_id: result._id!.toString(),
+		};
+	} catch (error) {
+		console.error(
+			`Error removing business ${businessId} from list ${listId}:`,
+			error
+		);
+		return null;
+	}
 }
 
 // Get businesses for a specific list
-export async function getBusinessesForList(listId: string): Promise<SavedBusiness[]> {
-  const database = await connectToMongoDB();
-  const listCollection = database.collection<SavedList>(COLLECTIONS.SAVED_LISTS);
-  const businessCollection = database.collection<SavedBusiness>(COLLECTIONS.SAVED_BUSINESSES);
+export async function getBusinessesForList(
+	listId: string
+): Promise<SavedBusiness[]> {
+	const database = await connectToMongoDB();
+	const listCollection = database.collection<SavedList>(
+		COLLECTIONS.SAVED_LISTS
+	);
+	const businessCollection = database.collection<SavedBusiness>(
+		COLLECTIONS.SAVED_BUSINESSES
+	);
 
-  try {
-    // Get the list
-    const list = await listCollection.findOne({ _id: new ObjectId(listId) });
-    if (!list || !list.businesses || list.businesses.length === 0) {
-      return [];
-    }
+	try {
+		// Get the list
+		const list = await listCollection.findOne({
+			_id: new ObjectId(listId),
+		});
+		if (!list || !list.businesses || list.businesses.length === 0) {
+			return [];
+		}
 
-    // Use string IDs instead of ObjectIds since businesses array contains string IDs
-    const businesses = await businessCollection.find({ 
-      _id: { $in: list.businesses.map(id => new ObjectId(id)) }
-    }).toArray();
+		// Use string IDs instead of ObjectIds since businesses array contains string IDs
+		const businesses = await businessCollection
+			.find({
+				_id: { $in: list.businesses.map((id) => new ObjectId(id)) },
+			})
+			.toArray();
 
-    return businesses.map(b => ({
-      ...b,
-      _id: b._id!.toString()
-    }));
-  } catch (error) {
-    console.error(`Error getting businesses for list ${listId}:`, error);
-    return [];
-  }
+		return businesses.map((b) => ({
+			...b,
+			_id: b._id!.toString(),
+		}));
+	} catch (error) {
+		console.error(`Error getting businesses for list ${listId}:`, error);
+		return [];
+	}
 }
 
 // Import businesses from CSV for a specific user
 export async function importBusinessesForUser(
-  userId: string, 
-  businesses: Array<Omit<SavedBusiness, 'userId' | 'createdAt' | 'updatedAt'>>,
-  options?: {
-    skipDuplicates?: boolean;
-    replaceDuplicates?: boolean;
-  }
+	userId: string,
+	businesses: Array<
+		Omit<SavedBusiness, 'userId' | 'createdAt' | 'updatedAt'>
+	>,
+	options?: {
+		skipDuplicates?: boolean;
+		replaceDuplicates?: boolean;
+	}
 ): Promise<{ count: number; businesses: SavedBusiness[] }> {
-  const database = await connectToMongoDB();
-  const businessCollection = database.collection<SavedBusiness>(COLLECTIONS.SAVED_BUSINESSES);
+	const database = await connectToMongoDB();
+	const businessCollection = database.collection<SavedBusiness>(
+		COLLECTIONS.SAVED_BUSINESSES
+	);
 
-  // Default options
-  const { 
-    skipDuplicates = true, 
-    replaceDuplicates = false 
-  } = options || {};
+	// Default options
+	const { skipDuplicates = true, replaceDuplicates = false } = options || {};
 
-  // First, get existing businesses for this user to check for duplicates
-  const existingBusinesses = await businessCollection
-    .find({ userId })
-    .toArray();
+	// First, get existing businesses for this user to check for duplicates
+	const existingBusinesses = await businessCollection
+		.find({ userId })
+		.toArray();
 
-  // Check for duplicates by website or name
-  const businessesToProcess = businesses.filter(newBusiness => {
-    // If not checking for duplicates, include all
-    if (!skipDuplicates) {
-      return true;
-    }
+	// Check for duplicates by website or name
+	const businessesToProcess = businesses.filter((newBusiness) => {
+		// If not checking for duplicates, include all
+		if (!skipDuplicates) {
+			return true;
+		}
 
-    // Look for duplicate by website first
-    const duplicateByWebsite = existingBusinesses.find(existing => {
-      if (!existing.website || !newBusiness.website) {
-        return false;
-      }
-      
-      // Normalize websites by removing protocol, www, and trailing slashes
-      const normalizedExisting = existing.website
-        .toLowerCase()
-        .replace(/^https?:\/\//i, '')
-        .replace(/^www\./i, '')
-        .replace(/\/+$/, '');
-        
-      const normalizedNew = newBusiness.website
-        .toLowerCase()
-        .replace(/^https?:\/\//i, '')
-        .replace(/^www\./i, '')
-        .replace(/\/+$/, '');
-        
-      return normalizedExisting === normalizedNew;
-    });
+		// Look for duplicate by website first
+		const duplicateByWebsite = existingBusinesses.find((existing) => {
+			if (!existing.website || !newBusiness.website) {
+				return false;
+			}
 
-    // If found duplicate by website
-    if (duplicateByWebsite) {
-      // If replacing duplicates, we'll handle it later
-      if (replaceDuplicates) {
-        return true;
-      }
-      // Otherwise skip this business
-      return false;
-    }
+			// Normalize websites by removing protocol, www, and trailing slashes
+			const normalizedExisting = existing.website
+				.toLowerCase()
+				.replace(/^https?:\/\//i, '')
+				.replace(/^www\./i, '')
+				.replace(/\/+$/, '');
 
-    // Look for duplicate by name as fallback with enhanced matching
-    const duplicateByName = existingBusinesses.find(existing => {
-      if (!existing.name || !newBusiness.name) {
-        return false;
-      }
-      
-      // Enhanced normalization that's more thorough:
-      // 1. Convert to lowercase
-      // 2. Remove legal suffixes (Inc, LLC, etc.)
-      // 3. Remove special characters including quotes and parentheses
-      // 4. Normalize whitespace
-      // 5. Replace common abbreviations
-      // 6. Remove filler words like "the", "and", etc.
-      const normalizeNameEnhanced = (name: string): string => {
-        return name
-          .toLowerCase()
-          // Replace common abbreviations
-          .replace(/\b(mktg|mrktg)\b/g, 'marketing')
-          .replace(/\b(co|comp)\b/g, 'company')
-          .replace(/\b(tech)\b/g, 'technology')
-          .replace(/\b(svcs)\b/g, 'services')
-          .replace(/\b(intl)\b/g, 'international')
-          .replace(/\b(grp)\b/g, 'group')
-          // Remove legal entity types and common suffixes
-          .replace(/\s*(inc|incorporated|llc|ltd|limited|corp|corporation|company|co|group|grp|holdings|partners|agency|associates|solutions|technologies|technology|digital|media|marketing|services|svcs|consultants|consultancy|international|intl|global)\.?\s*$/i, '')
-          // Remove "The" from beginning
-          .replace(/^the\s+/i, '')
-          // Remove special characters, leaving only alphanumeric and spaces
-          .replace(/[^\w\s]/g, '')
-          // Normalize whitespace (collapse multiple spaces to single space and trim)
-          .replace(/\s+/g, ' ')
-          .trim();
-      };
-      
-      // Apply enhanced normalization
-      const normalizedExisting = normalizeNameEnhanced(existing.name);
-      const normalizedNew = normalizeNameEnhanced(newBusiness.name);
-      
-      // Try exact match first
-      if (normalizedExisting === normalizedNew) {
-        return true;
-      }
-      
-      // If names are short (less than 3 words), require exact match
-      // Otherwise try additional fuzzy matching techniques
-      const wordCountExisting = normalizedExisting.split(' ').length;
-      const wordCountNew = normalizedNew.split(' ').length;
-      
-      if (wordCountExisting <= 2 && wordCountNew <= 2) {
-        return false; // Require exact match for short names
-      }
-      
-      // For longer names, check if one name contains the other completely
-      if (normalizedExisting.includes(normalizedNew) || normalizedNew.includes(normalizedExisting)) {
-        return true;
-      }
-      
-      // Check if there's significant word overlap for multi-word names
-      const wordsExisting = normalizedExisting.split(' ');
-      const wordsNew = normalizedNew.split(' ');
-      
-      // Count common words
-      const commonWords = wordsExisting.filter(word => wordsNew.includes(word));
-      
-      // If at least 2 significant words match and they represent at least 50% of the shorter name's words
-      if (commonWords.length >= 2 && 
-          (commonWords.length / Math.min(wordsExisting.length, wordsNew.length)) >= 0.5) {
-        return true;
-      }
-      
-      return false;
-    });
+			const normalizedNew = newBusiness.website
+				.toLowerCase()
+				.replace(/^https?:\/\//i, '')
+				.replace(/^www\./i, '')
+				.replace(/\/+$/, '');
 
-    // If found duplicate by name
-    if (duplicateByName) {
-      // If replacing duplicates, we'll handle it later
-      if (replaceDuplicates) {
-        return true;
-      }
-      // Otherwise skip this business
-      return false;
-    }
+			return normalizedExisting === normalizedNew;
+		});
 
-    // No duplicate found, include this business
-    return true;
-  });
+		// If found duplicate by website
+		if (duplicateByWebsite) {
+			// If replacing duplicates, we'll handle it later
+			if (replaceDuplicates) {
+				return true;
+			}
+			// Otherwise skip this business
+			return false;
+		}
 
-  // Add userId and timestamps to all businesses
-  const businessesToInsert = businessesToProcess.map(business => ({
-    ...business,
-    userId,
-    createdAt: new Date(),
-    updatedAt: new Date()
-  }));
+		// Look for duplicate by name as fallback with enhanced matching
+		const duplicateByName = existingBusinesses.find((existing) => {
+			if (!existing.name || !newBusiness.name) {
+				return false;
+			}
 
-  // If there are no businesses to insert after filtering
-  if (businessesToInsert.length === 0) {
-    return {
-      count: 0,
-      businesses: []
-    };
-  }
+			// Enhanced normalization that's more thorough:
+			// 1. Convert to lowercase
+			// 2. Remove legal suffixes (Inc, LLC, etc.)
+			// 3. Remove special characters including quotes and parentheses
+			// 4. Normalize whitespace
+			// 5. Replace common abbreviations
+			// 6. Remove filler words like "the", "and", etc.
+			const normalizeNameEnhanced = (name: string): string => {
+				return (
+					name
+						.toLowerCase()
+						// Replace common abbreviations
+						.replace(/\b(mktg|mrktg)\b/g, 'marketing')
+						.replace(/\b(co|comp)\b/g, 'company')
+						.replace(/\b(tech)\b/g, 'technology')
+						.replace(/\b(svcs)\b/g, 'services')
+						.replace(/\b(intl)\b/g, 'international')
+						.replace(/\b(grp)\b/g, 'group')
+						// Remove legal entity types and common suffixes
+						.replace(
+							/\s*(inc|incorporated|llc|ltd|limited|corp|corporation|company|co|group|grp|holdings|partners|agency|associates|solutions|technologies|technology|digital|media|marketing|services|svcs|consultants|consultancy|international|intl|global)\.?\s*$/i,
+							''
+						)
+						// Remove "The" from beginning
+						.replace(/^the\s+/i, '')
+						// Remove special characters, leaving only alphanumeric and spaces
+						.replace(/[^\w\s]/g, '')
+						// Normalize whitespace (collapse multiple spaces to single space and trim)
+						.replace(/\s+/g, ' ')
+						.trim()
+				);
+			};
 
-  // Handle replacing duplicates if needed
-  if (replaceDuplicates) {
-    // First delete any duplicates
-    for (const business of businessesToInsert) {
-      if (!business.website && !business.name) continue;
-      
-      // Build query to find duplicates
-      const query: any = { userId };
-      
-      if (business.website) {
-        // Normalize website for search
-        const normalizedWebsite = business.website
-          .toLowerCase()
-          .replace(/^https?:\/\//i, '')
-          .replace(/^www\./i, '')
-          .replace(/\/+$/, '');
-          
-        query.website = { 
-          $regex: new RegExp(`^(https?:\/\/)?(www\\.)?${normalizedWebsite.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\/?$`, 'i') 
-        };
-      } else if (business.name) {
-        // Normalize name for search
-        const normalizedName = business.name
-          .toLowerCase()
-          .replace(/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i, '');
-          
-        query.name = { 
-          $regex: new RegExp(`^${normalizedName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}(\\s*(inc|llc|ltd|corp|corporation)\\s*\\.?)?$`, 'i') 
-        };
-      }
-      
-      // Delete duplicates
-      await businessCollection.deleteMany(query);
-    }
-  }
+			// Apply enhanced normalization
+			const normalizedExisting = normalizeNameEnhanced(existing.name);
+			const normalizedNew = normalizeNameEnhanced(newBusiness.name);
 
-  // Insert all businesses
-  const result = await businessCollection.insertMany(businessesToInsert);
+			// Try exact match first
+			if (normalizedExisting === normalizedNew) {
+				return true;
+			}
 
-  // Get the inserted businesses with IDs
-  const insertedObjectIds = Object.values(result.insertedIds);
-  
-  const insertedBusinesses = await businessCollection
-    .find({ _id: { $in: insertedObjectIds } })
-    .toArray();
+			// If names are short (less than 3 words), require exact match
+			// Otherwise try additional fuzzy matching techniques
+			const wordCountExisting = normalizedExisting.split(' ').length;
+			const wordCountNew = normalizedNew.split(' ').length;
 
-  return {
-    count: insertedBusinesses.length,
-    businesses: insertedBusinesses.map(b => ({
-      ...b,
-      _id: b._id!.toString()
-    }))
-  };
+			if (wordCountExisting <= 2 && wordCountNew <= 2) {
+				return false; // Require exact match for short names
+			}
+
+			// For longer names, check if one name contains the other completely
+			if (
+				normalizedExisting.includes(normalizedNew) ||
+				normalizedNew.includes(normalizedExisting)
+			) {
+				return true;
+			}
+
+			// Check if there's significant word overlap for multi-word names
+			const wordsExisting = normalizedExisting.split(' ');
+			const wordsNew = normalizedNew.split(' ');
+
+			// Count common words
+			const commonWords = wordsExisting.filter((word) =>
+				wordsNew.includes(word)
+			);
+
+			// If at least 2 significant words match and they represent at least 50% of the shorter name's words
+			if (
+				commonWords.length >= 2 &&
+				commonWords.length /
+					Math.min(wordsExisting.length, wordsNew.length) >=
+					0.5
+			) {
+				return true;
+			}
+
+			return false;
+		});
+
+		// If found duplicate by name
+		if (duplicateByName) {
+			// If replacing duplicates, we'll handle it later
+			if (replaceDuplicates) {
+				return true;
+			}
+			// Otherwise skip this business
+			return false;
+		}
+
+		// No duplicate found, include this business
+		return true;
+	});
+
+	// Add userId and timestamps to all businesses
+	const businessesToInsert = businessesToProcess.map((business) => ({
+		...business,
+		userId,
+		createdAt: new Date(),
+		updatedAt: new Date(),
+	}));
+
+	// If there are no businesses to insert after filtering
+	if (businessesToInsert.length === 0) {
+		return {
+			count: 0,
+			businesses: [],
+		};
+	}
+
+	// Handle replacing duplicates if needed
+	if (replaceDuplicates) {
+		// First delete any duplicates
+		for (const business of businessesToInsert) {
+			if (!business.website && !business.name) continue;
+
+			// Build query to find duplicates
+			const query: any = { userId };
+
+			if (business.website) {
+				// Normalize website for search
+				const normalizedWebsite = business.website
+					.toLowerCase()
+					.replace(/^https?:\/\//i, '')
+					.replace(/^www\./i, '')
+					.replace(/\/+$/, '');
+
+				query.website = {
+					$regex: new RegExp(
+						`^(https?:\/\/)?(www\\.)?${normalizedWebsite.replace(
+							/[-\/\\^$*+?.()|[\]{}]/g,
+							'\\$&'
+						)}\\/?$`,
+						'i'
+					),
+				};
+			} else if (business.name) {
+				// Normalize name for search
+				const normalizedName = business.name
+					.toLowerCase()
+					.replace(/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i, '');
+
+				query.name = {
+					$regex: new RegExp(
+						`^${normalizedName.replace(
+							/[-\/\\^$*+?.()|[\]{}]/g,
+							'\\$&'
+						)}(\\s*(inc|llc|ltd|corp|corporation)\\s*\\.?)?$`,
+						'i'
+					),
+				};
+			}
+
+			// Delete duplicates
+			await businessCollection.deleteMany(query);
+		}
+	}
+
+	// Insert all businesses
+	const result = await businessCollection.insertMany(businessesToInsert);
+
+	// Get the inserted businesses with IDs
+	const insertedObjectIds = Object.values(result.insertedIds);
+
+	const insertedBusinesses = await businessCollection
+		.find({ _id: { $in: insertedObjectIds } })
+		.toArray();
+
+	return {
+		count: insertedBusinesses.length,
+		businesses: insertedBusinesses.map((b) => ({
+			...b,
+			_id: b._id!.toString(),
+		})),
+	};
 }
 
 // API Keys Management Functions
-export async function saveApiKeys(userId: string, apiKeys: Partial<Pick<ApiKeys, 'googlePlacesApiKey' | 'openaiApiKey' | 'mongodbUri'>>): Promise<ApiKeys> {
-  const database = await connectToMongoDB();
-  const apiKeysCollection = database.collection<ApiKeys>(COLLECTIONS.API_KEYS);
+export async function saveApiKeys(
+	userId: string,
+	apiKeys: Partial<
+		Pick<ApiKeys, 'googlePlacesApiKey' | 'openaiApiKey' | 'mongodbUri'>
+	>
+): Promise<ApiKeys> {
+	const database = await connectToMongoDB();
+	const apiKeysCollection = database.collection<ApiKeys>(
+		COLLECTIONS.API_KEYS
+	);
 
-  const apiKeysData: ApiKeys = {
-    userId,
-    googlePlacesApiKey: apiKeys.googlePlacesApiKey,
-    openaiApiKey: apiKeys.openaiApiKey,
-    mongodbUri: apiKeys.mongodbUri,
-    createdAt: new Date(),
-    updatedAt: new Date()
-  };
+	const apiKeysData: ApiKeys = {
+		userId,
+		googlePlacesApiKey: apiKeys.googlePlacesApiKey,
+		openaiApiKey: apiKeys.openaiApiKey,
+		mongodbUri: apiKeys.mongodbUri,
+		createdAt: new Date(),
+		updatedAt: new Date(),
+	};
 
-  // Upsert - update if exists, create if doesn't
-  const result = await apiKeysCollection.findOneAndUpdate(
-    { userId },
-    { 
-      $set: { 
-        ...apiKeysData,
-        updatedAt: new Date() 
-      },
-      $setOnInsert: {
-        createdAt: new Date()
-      }
-    },
-    { 
-      upsert: true, 
-      returnDocument: 'after' 
-    }
-  );
+	// Upsert - update if exists, create if doesn't
+	const result = await apiKeysCollection.findOneAndUpdate(
+		{ userId },
+		{
+			$set: {
+				...apiKeysData,
+				updatedAt: new Date(),
+			},
+			$setOnInsert: {
+				createdAt: new Date(),
+			},
+		},
+		{
+			upsert: true,
+			returnDocument: 'after',
+		}
+	);
 
-  return {
-    ...result!,
-    _id: result!._id!.toString()
-  };
+	return {
+		...result!,
+		_id: result!._id!.toString(),
+	};
 }
 
 export async function getApiKeys(userId: string): Promise<ApiKeys | null> {
-  const database = await connectToMongoDB();
-  const apiKeysCollection = database.collection<ApiKeys>(COLLECTIONS.API_KEYS);
+	const database = await connectToMongoDB();
+	const apiKeysCollection = database.collection<ApiKeys>(
+		COLLECTIONS.API_KEYS
+	);
 
-  const apiKeys = await apiKeysCollection.findOne({ userId });
-  if (!apiKeys) return null;
+	const apiKeys = await apiKeysCollection.findOne({ userId });
+	if (!apiKeys) return null;
 
-  return {
-    ...apiKeys,
-    _id: apiKeys._id!.toString()
-  };
+	return {
+		...apiKeys,
+		_id: apiKeys._id!.toString(),
+	};
 }
 
-export async function getApiKeysStatus(userId: string): Promise<{hasGooglePlacesKey: boolean, hasOpenaiKey: boolean, hasMongodbUri: boolean, updatedAt?: string}> {
-  try {
-    const userApiKeys = await getApiKeys(userId);
-    
-    // Check if API keys are available (either user-provided or server environment)
-    const hasGooglePlacesKey = !!(userApiKeys?.googlePlacesApiKey || process.env.GOOGLE_PLACES_API_KEY);
-    const hasOpenaiKey = !!(userApiKeys?.openaiApiKey || process.env.OPENAI_API_KEY);
-    const hasMongodbUri = !!(userApiKeys?.mongodbUri || process.env.MONGODB_URI || process.env.DATABASE_URL);
-    
-    return {
-      hasGooglePlacesKey,
-      hasOpenaiKey,
-      hasMongodbUri,
-      updatedAt: userApiKeys?.updatedAt?.toISOString()
-    };
-  } catch (error) {
-    console.error("Error getting API keys status:", error);
-    // If there's an error, still check server environment variables
-    return {
-      hasGooglePlacesKey: !!process.env.GOOGLE_PLACES_API_KEY,
-      hasOpenaiKey: !!process.env.OPENAI_API_KEY,
-      hasMongodbUri: !!(process.env.MONGODB_URI || process.env.DATABASE_URL)
-    };
-  }
+export async function getApiKeysStatus(
+	userId: string
+): Promise<{
+	hasGooglePlacesKey: boolean;
+	hasOpenaiKey: boolean;
+	hasMongodbUri: boolean;
+	updatedAt?: string;
+}> {
+	try {
+		const userApiKeys = await getApiKeys(userId);
+
+		// Check if API keys are available (user-provided only, no fallbacks)
+		const hasGooglePlacesKey = !!userApiKeys?.googlePlacesApiKey;
+		const hasOpenaiKey = !!userApiKeys?.openaiApiKey;
+		const hasMongodbUri = !!userApiKeys?.mongodbUri;
+
+		return {
+			hasGooglePlacesKey,
+			hasOpenaiKey,
+			hasMongodbUri,
+			updatedAt: userApiKeys?.updatedAt?.toISOString(),
+		};
+	} catch (error) {
+		console.error('Error getting API keys status:', error);
+		// No fallbacks - all keys must be user-provided
+		return {
+			hasGooglePlacesKey: false,
+			hasOpenaiKey: false,
+			hasMongodbUri: false,
+		};
+	}
 }
 
 export async function deleteApiKeys(userId: string): Promise<boolean> {
-  const database = await connectToMongoDB();
-  const apiKeysCollection = database.collection<ApiKeys>(COLLECTIONS.API_KEYS);
+	const database = await connectToMongoDB();
+	const apiKeysCollection = database.collection<ApiKeys>(
+		COLLECTIONS.API_KEYS
+	);
 
-  try {
-    const result = await apiKeysCollection.deleteOne({ userId });
-    return result.deletedCount > 0;
-  } catch (error) {
-    console.error(`Error deleting API keys for user ${userId}:`, error);
-    return false;
-  }
+	try {
+		const result = await apiKeysCollection.deleteOne({ userId });
+		return result.deletedCount > 0;
+	} catch (error) {
+		console.error(`Error deleting API keys for user ${userId}:`, error);
+		return false;
+	}
 }
 
 // Search Fingerprinting + Persistent Result Storage functions
 
 // Generate unique fingerprint for search parameters
 export function generateSearchFingerprint(params: {
-  businessType: string,
-  location?: string,
-  state?: string,
-  selectedCities?: string[],
-  radius?: string,
-  maxResults?: number
+	businessType: string;
+	location?: string;
+	state?: string;
+	selectedCities?: string[];
+	radius?: string;
+	maxResults?: number;
 }): string {
-  // Normalize parameters for consistent fingerprinting
-  const normalized = {
-    businessType: params.businessType.toLowerCase().trim(),
-    location: params.location?.toLowerCase().trim(),
-    state: params.state?.toLowerCase().trim(),
-    selectedCities: params.selectedCities?.map(city => city.toLowerCase().trim()).sort(),
-    radius: params.radius,
-    maxResults: params.maxResults
-  };
-  
-  // Create deterministic hash
-  const fingerprintData = JSON.stringify(normalized);
-  return crypto.createHash('sha256').update(fingerprintData).digest('hex');
+	// Normalize parameters for consistent fingerprinting
+	const normalized = {
+		businessType: params.businessType.toLowerCase().trim(),
+		location: params.location?.toLowerCase().trim(),
+		state: params.state?.toLowerCase().trim(),
+		selectedCities: params.selectedCities
+			?.map((city) => city.toLowerCase().trim())
+			.sort(),
+		radius: params.radius,
+		maxResults: params.maxResults,
+	};
+
+	// Create deterministic hash
+	const fingerprintData = JSON.stringify(normalized);
+	return crypto.createHash('sha256').update(fingerprintData).digest('hex');
 }
 
 // Save search results to cache
-export async function saveCachedSearchResult(searchResult: Omit<CachedSearchResult, '_id'>): Promise<CachedSearchResult> {
-  try {
-    const database = await connectToMongoDB();
-    
-    // Use upsert to replace existing cache if fingerprint exists
-    const result = await database.collection(COLLECTIONS.CACHED_SEARCHES).findOneAndUpdate(
-      { searchFingerprint: searchResult.searchFingerprint },
-      { 
-        $set: {
-          ...searchResult,
-          createdAt: new Date(),
-          expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000) // 48 hour cache
-        }
-      },
-      { 
-        upsert: true, 
-        returnDocument: 'after'
-      }
-    );
-    
-    return result as CachedSearchResult;
-  } catch (error) {
-    console.error('Error saving cached search result:', error);
-    throw error;
-  }
+export async function saveCachedSearchResult(
+	searchResult: Omit<CachedSearchResult, '_id'>
+): Promise<CachedSearchResult> {
+	try {
+		const database = await connectToMongoDB();
+
+		// Use upsert to replace existing cache if fingerprint exists
+		const result = await database
+			.collection(COLLECTIONS.CACHED_SEARCHES)
+			.findOneAndUpdate(
+				{ searchFingerprint: searchResult.searchFingerprint },
+				{
+					$set: {
+						...searchResult,
+						createdAt: new Date(),
+						expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), // 48 hour cache
+					},
+				},
+				{
+					upsert: true,
+					returnDocument: 'after',
+				}
+			);
+
+		return result as CachedSearchResult;
+	} catch (error) {
+		console.error('Error saving cached search result:', error);
+		throw error;
+	}
 }
 
 // Get cached search results by fingerprint
-export async function getCachedSearchResult(searchFingerprint: string): Promise<CachedSearchResult | null> {
-  try {
-    const database = await connectToMongoDB();
-    
-    // Find non-expired cached result
-    const result = await database.collection(COLLECTIONS.CACHED_SEARCHES).findOne({
-      searchFingerprint,
-      expiresAt: { $gt: new Date() }
-    });
-    
-    return result as CachedSearchResult | null;
-  } catch (error) {
-    console.error('Error getting cached search result:', error);
-    return null;
-  }
+export async function getCachedSearchResult(
+	searchFingerprint: string
+): Promise<CachedSearchResult | null> {
+	try {
+		const database = await connectToMongoDB();
+
+		// Find non-expired cached result
+		const result = await database
+			.collection(COLLECTIONS.CACHED_SEARCHES)
+			.findOne({
+				searchFingerprint,
+				expiresAt: { $gt: new Date() },
+			});
+
+		return result as CachedSearchResult | null;
+	} catch (error) {
+		console.error('Error getting cached search result:', error);
+		return null;
+	}
 }
 
 // Clean up expired cached search results
 export async function cleanupExpiredCachedResults(): Promise<number> {
-  try {
-    const database = await connectToMongoDB();
-    const result = await database.collection(COLLECTIONS.CACHED_SEARCHES).deleteMany({
-      expiresAt: { $lt: new Date() }
-    });
-    
-    return result.deletedCount || 0;
-  } catch (error) {
-    console.error('Error cleaning up expired cached results:', error);
-    return 0;
-  }
+	try {
+		const database = await connectToMongoDB();
+		const result = await database
+			.collection(COLLECTIONS.CACHED_SEARCHES)
+			.deleteMany({
+				expiresAt: { $lt: new Date() },
+			});
+
+		return result.deletedCount || 0;
+	} catch (error) {
+		console.error('Error cleaning up expired cached results:', error);
+		return 0;
+	}
 }
 
 // Get all cached searches for debugging (admin function)
-export async function getAllCachedSearches(limit: number = 50): Promise<CachedSearchResult[]> {
-  try {
-    const database = await connectToMongoDB();
-    const results = await database.collection(COLLECTIONS.CACHED_SEARCHES)
-      .find({})
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .toArray();
-    
-    return results as CachedSearchResult[];
-  } catch (error) {
-    console.error('Error getting all cached searches:', error);
-    return [];
-  }
+export async function getAllCachedSearches(
+	limit: number = 50
+): Promise<CachedSearchResult[]> {
+	try {
+		const database = await connectToMongoDB();
+		const results = await database
+			.collection(COLLECTIONS.CACHED_SEARCHES)
+			.find({})
+			.sort({ createdAt: -1 })
+			.limit(limit)
+			.toArray();
+
+		return results as CachedSearchResult[];
+	} catch (error) {
+		console.error('Error getting all cached searches:', error);
+		return [];
+	}
 }
