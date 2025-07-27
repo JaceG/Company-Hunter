@@ -2676,6 +2676,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 		}
 	);
 
+	// Get guest businesses for duplicate detection
+	app.get('/api/guest/businesses', optionalUserOrGuest, async (req, res) => {
+		try {
+			if (req.guest?.guestId) {
+				const guestBusinesses = await getGuestBusinesses(
+					req.guest.guestId
+				);
+				res.json({ businesses: guestBusinesses });
+			} else {
+				// No guest session, return empty array
+				res.json({ businesses: [] });
+			}
+		} catch (error) {
+			console.error('Error fetching guest businesses:', error);
+			res.status(500).json({
+				message: 'An error occurred while fetching guest businesses',
+			});
+		}
+	});
+
 	// Generate search suggestions based on current search
 	app.post('/api/businesses/suggestions', authenticate, async (req, res) => {
 		try {
