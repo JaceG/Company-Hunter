@@ -179,3 +179,35 @@ export const cachedSearchResultSchema = z.object({
 export type CachedSearchResult = z.infer<typeof cachedSearchResultSchema> & {
 	_id?: string;
 };
+
+// Guest Demo System Schemas
+
+// Demo search quota tracking
+export const demoSearchSchema = z.object({
+	guestId: z.string(),
+	count: z.number().int().min(0).max(100), // Prevent abuse
+	firstSearchAt: z.date(),
+	lastSearchAt: z.date(),
+	createdAt: z.date().optional(),
+	updatedAt: z.date().optional(),
+});
+
+export type DemoSearch = z.infer<typeof demoSearchSchema>;
+
+// Guest search results storage
+export const guestResultSchema = z.object({
+	guestId: z.string(),
+	businesses: z.array(savedBusinessSchema), // Reuse existing business schema
+	searchParams: z.object({
+		searchTerm: z.string(),
+		location: z.string().optional(),
+		radius: z.number().optional(),
+		type: z.string().optional(),
+	}),
+	searchFingerprint: z.string(), // For deduplication
+	totalResults: z.number(),
+	createdAt: z.date(),
+	expiresAt: z.date(), // TTL for 90-day deletion
+});
+
+export type GuestResult = z.infer<typeof guestResultSchema>;

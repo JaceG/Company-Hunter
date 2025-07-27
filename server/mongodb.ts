@@ -64,6 +64,8 @@ const COLLECTIONS = {
 	SAVED_LISTS: 'savedLists',
 	API_KEYS: 'apiKeys',
 	CACHED_SEARCHES: 'cachedSearches',
+	DEMO_SEARCHES: 'demoSearches',
+	GUEST_RESULTS: 'guestResults',
 };
 
 // MongoDB connection client
@@ -96,6 +98,15 @@ export async function connectToMongoDB(): Promise<Db> {
 		await db
 			.collection(COLLECTIONS.CACHED_SEARCHES)
 			.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+		await db
+			.collection(COLLECTIONS.DEMO_SEARCHES)
+			.createIndex({ guestId: 1 }, { unique: true });
+		await db
+			.collection(COLLECTIONS.GUEST_RESULTS)
+			.createIndex(
+				{ guestId: 1, searchFingerprint: 1 },
+				{ unique: true }
+			);
 
 		return db;
 	} catch (error) {
@@ -902,12 +913,12 @@ export async function saveApiKeys(
 		COLLECTIONS.API_KEYS
 	);
 
-	const apiKeysData: ApiKeys = {
+	// Prepare update data (excluding createdAt since it should only be set on insert)
+	const updateData = {
 		userId,
 		googlePlacesApiKey: apiKeys.googlePlacesApiKey,
 		openaiApiKey: apiKeys.openaiApiKey,
 		mongodbUri: apiKeys.mongodbUri,
-		createdAt: new Date(),
 		updatedAt: new Date(),
 	};
 
@@ -915,10 +926,7 @@ export async function saveApiKeys(
 	const result = await apiKeysCollection.findOneAndUpdate(
 		{ userId },
 		{
-			$set: {
-				...apiKeysData,
-				updatedAt: new Date(),
-			},
+			$set: updateData,
 			$setOnInsert: {
 				createdAt: new Date(),
 			},
@@ -1113,4 +1121,195 @@ export async function getAllCachedSearches(
 		console.error('Error getting all cached searches:', error);
 		return [];
 	}
+}
+
+// Guest Demo System Functions
+
+// Demo Search Quota Management
+export async function incrementDemoSearchCount(
+	guestId: string
+): Promise<{ count: number; remaining: number }> {
+	const database = await connectToMongoDB();
+	const demoSearchesCollection = database.collection<DemoSearch>(
+		COLLECTIONS.DEMO_SEARCHES
+	);
+
+	const now = new Date();
+
+	// Upsert the demo search record
+	const result = await demoSearchesCollection.findOneAndUpdate(
+		{ guestId },
+		{
+			$inc: { count: 1 },
+			$set: { lastSearchAt: now },
+			$setOnInsert: { firstSearchAt: now, createdAt: now },
+		},
+		{
+			upsert: true,
+			returnDocument: 'after',
+		}
+	);
+
+	const count = result?.count || 1;
+	const remaining = Math.max(0, 20 - count); // 20 search limit
+
+	return { count, remaining };
+}
+
+export async function getDemoSearchStatus(
+	guestId: string
+): Promise<{ count: number; remaining: number; canSearch: boolean }> {
+	const database = await connectToMongoDB();
+	const demoSearchesCollection = database.collection<DemoSearch>(
+		COLLECTIONS.DEMO_SEARCHES
+	);
+
+	const demoSearch = await demoSearchesCollection.findOne({ guestId });
+
+	if (!demoSearch) {
+		return { count: 0, remaining: 20, canSearch: true };
+	}
+
+	const count = demoSearch.count;
+	const remaining = Math.max(0, 20 - count);
+	const canSearch = count < 20;
+
+	return { count, remaining, canSearch };
+}
+
+// Guest Results Management
+export async function saveGuestResults(
+	guestResult: Omit<GuestResult, 'createdAt' | 'expiresAt'>
+): Promise<GuestResult> {
+	const database = await connectToMongoDB();
+	const guestResultsCollection = database.collection<GuestResult>(
+		COLLECTIONS.GUEST_RESULTS
+	);
+
+	const now = new Date();
+	const expiresAt = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 days from now
+
+	const newGuestResult: GuestResult = {
+		...guestResult,
+		createdAt: now,
+		expiresAt,
+	};
+
+	// Use upsert to avoid duplicates based on guestId and searchFingerprint
+	const result = await guestResultsCollection.findOneAndReplace(
+		{
+			guestId: guestResult.guestId,
+			searchFingerprint: guestResult.searchFingerprint,
+		},
+		newGuestResult,
+		{
+			upsert: true,
+			returnDocument: 'after',
+		}
+	);
+
+	return result as GuestResult;
+}
+
+export async function getGuestResults(
+	guestId: string,
+	limit: number = 100
+): Promise<GuestResult[]> {
+	const database = await connectToMongoDB();
+	const guestResultsCollection = database.collection<GuestResult>(
+		COLLECTIONS.GUEST_RESULTS
+	);
+
+	const results = await guestResultsCollection
+		.find({ guestId })
+		.sort({ createdAt: -1 })
+		.limit(limit)
+		.toArray();
+
+	return results as GuestResult[];
+}
+
+export async function getGuestBusinesses(
+	guestId: string
+): Promise<SavedBusiness[]> {
+	const database = await connectToMongoDB();
+	const guestResultsCollection = database.collection<GuestResult>(
+		COLLECTIONS.GUEST_RESULTS
+	);
+
+	const results = await guestResultsCollection
+		.find({ guestId })
+		.sort({ createdAt: -1 })
+		.toArray();
+
+	// Flatten all businesses from all search results
+	const allBusinesses: SavedBusiness[] = [];
+	const seenBusinesses = new Set<string>(); // Track duplicates by name+location
+
+	for (const result of results) {
+		for (const business of result.businesses) {
+			const businessKey = `${business.name}:${business.location}`;
+			if (!seenBusinesses.has(businessKey)) {
+				seenBusinesses.add(businessKey);
+				allBusinesses.push(business);
+			}
+		}
+	}
+
+	return allBusinesses;
+}
+
+export async function deleteGuestData(guestId: string): Promise<void> {
+	const database = await connectToMongoDB();
+
+	// Delete from both guest collections
+	await Promise.all([
+		database.collection(COLLECTIONS.DEMO_SEARCHES).deleteMany({ guestId }),
+		database.collection(COLLECTIONS.GUEST_RESULTS).deleteMany({ guestId }),
+	]);
+}
+
+export async function migrateGuestDataToUser(
+	guestId: string,
+	userId: string
+): Promise<void> {
+	const database = await connectToMongoDB();
+
+	// Get all guest results
+	const guestResults = await getGuestResults(guestId);
+
+	if (guestResults.length === 0) {
+		return; // Nothing to migrate
+	}
+
+	// Convert guest results to saved businesses for the user
+	const savedBusinessesCollection = database.collection<SavedBusiness>(
+		COLLECTIONS.SAVED_BUSINESSES
+	);
+
+	const businessesToSave: SavedBusiness[] = [];
+	const seenBusinesses = new Set<string>();
+
+	for (const result of guestResults) {
+		for (const business of result.businesses) {
+			const businessKey = `${business.name}:${business.location}`;
+			if (!seenBusinesses.has(businessKey)) {
+				seenBusinesses.add(businessKey);
+				businessesToSave.push({
+					...business,
+					userId, // Assign to the new user
+					createdAt: new Date(),
+					updatedAt: new Date(),
+				});
+			}
+		}
+	}
+
+	// Bulk insert businesses for the user
+	if (businessesToSave.length > 0) {
+		await savedBusinessesCollection.insertMany(businessesToSave);
+	}
+
+	// Clean up guest data after successful migration
+	await deleteGuestData(guestId);
 }

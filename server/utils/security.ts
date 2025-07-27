@@ -6,18 +6,37 @@ import crypto from 'crypto';
  * Validates Google Places API key format
  */
 export function validateGooglePlacesApiKey(apiKey: string): boolean {
-	// Google API keys are typically 39 characters long and contain alphanumeric characters, hyphens, and underscores
-	const googleApiKeyPattern = /^[A-Za-z0-9_-]{35,45}$/;
-	return googleApiKeyPattern.test(apiKey);
+	// Google API keys can vary in format, be more flexible
+	// They are typically 35-45 characters but can be longer
+	// Allow more characters including dots and other special chars
+	if (apiKey.length < 30 || apiKey.length > 50) {
+		return false;
+	}
+
+	// Basic validation - should not contain whitespace or obvious malicious content
+	if (/\s/.test(apiKey) || /<script|javascript:|eval\(/.test(apiKey)) {
+		return false;
+	}
+
+	return true;
 }
 
 /**
  * Validates OpenAI API key format
  */
 export function validateOpenAIApiKey(apiKey: string): boolean {
-	// OpenAI API keys start with 'sk-' followed by alphanumeric characters
-	const openaiApiKeyPattern = /^sk-[A-Za-z0-9]{48,}$/;
-	return openaiApiKeyPattern.test(apiKey);
+	// OpenAI API keys typically start with 'sk-' but be more flexible
+	// Accept keys that start with sk- or other prefixes OpenAI might use
+	if (apiKey.length < 20) {
+		return false;
+	}
+
+	// Basic validation - should not contain whitespace or obvious malicious content
+	if (/\s/.test(apiKey) || /<script|javascript:|eval\(/.test(apiKey)) {
+		return false;
+	}
+
+	return true;
 }
 
 /**
@@ -25,26 +44,42 @@ export function validateOpenAIApiKey(apiKey: string): boolean {
  */
 export function validateMongoDBUri(uri: string): boolean {
 	try {
-		// Basic MongoDB URI validation
-		const mongoUriPattern = /^mongodb(\+srv)?:\/\/[^\s]+$/;
+		// Basic MongoDB URI validation - be more flexible
+		const mongoUriPattern = /^mongodb(\+srv)?:\/\//;
 		if (!mongoUriPattern.test(uri)) {
 			return false;
 		}
 
-		// Additional security checks
-		if (uri.includes('localhost') || uri.includes('127.0.0.1')) {
-			return false; // Don't allow local connections for security
+		// Allow localhost connections for development
+		// But warn about them in production
+		if (
+			(uri.includes('localhost') || uri.includes('127.0.0.1')) &&
+			process.env.NODE_ENV === 'production'
+		) {
+			console.warn(
+				'Warning: localhost MongoDB URI detected in production'
+			);
 		}
 
-		// Check for suspicious patterns
+		// Check for suspicious patterns that could indicate injection attacks
 		const suspiciousPatterns = [
-			/javascript:/i,
 			/<script/i,
+			/javascript:/i,
 			/eval\(/i,
 			/expression\(/i,
+			/data:text\/html/i,
 		];
 
-		return !suspiciousPatterns.some((pattern) => pattern.test(uri));
+		if (suspiciousPatterns.some((pattern) => pattern.test(uri))) {
+			return false;
+		}
+
+		// Basic length check
+		if (uri.length < 10 || uri.length > 2000) {
+			return false;
+		}
+
+		return true;
 	} catch {
 		return false;
 	}
@@ -181,7 +216,9 @@ export function validateAndSanitizeApiKeys(apiKeys: {
 	if (apiKeys.googlePlacesApiKey) {
 		const sanitizedGoogleKey = sanitizeInput(apiKeys.googlePlacesApiKey);
 		if (!validateGooglePlacesApiKey(sanitizedGoogleKey)) {
-			errors.push('Invalid Google Places API key format');
+			errors.push(
+				`Invalid Google Places API key format. Expected: 30-50 characters without whitespace. Received length: ${sanitizedGoogleKey.length}`
+			);
 		} else {
 			sanitized.googlePlacesApiKey = sanitizedGoogleKey;
 		}
@@ -191,7 +228,9 @@ export function validateAndSanitizeApiKeys(apiKeys: {
 	if (apiKeys.openaiApiKey) {
 		const sanitizedOpenAIKey = sanitizeInput(apiKeys.openaiApiKey);
 		if (!validateOpenAIApiKey(sanitizedOpenAIKey)) {
-			errors.push('Invalid OpenAI API key format');
+			errors.push(
+				`Invalid OpenAI API key format. Expected: at least 20 characters without whitespace. Received length: ${sanitizedOpenAIKey.length}`
+			);
 		} else {
 			sanitized.openaiApiKey = sanitizedOpenAIKey;
 		}
@@ -202,7 +241,7 @@ export function validateAndSanitizeApiKeys(apiKeys: {
 		const sanitizedMongoUri = sanitizeInput(apiKeys.mongodbUri);
 		if (!validateMongoDBUri(sanitizedMongoUri)) {
 			errors.push(
-				'Invalid MongoDB URI format or contains suspicious content'
+				`Invalid MongoDB URI format. Expected: mongodb:// or mongodb+srv:// protocol, 10-2000 characters. Received length: ${sanitizedMongoUri.length}`
 			);
 		} else {
 			sanitized.mongodbUri = sanitizedMongoUri;

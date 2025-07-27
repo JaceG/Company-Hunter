@@ -76,10 +76,25 @@ export default function ApiKeySetup() {
 			setOpenaiKey('');
 			setMongodbUri('');
 			setShowKeys(false);
-		} catch (error) {
+		} catch (error: any) {
+			console.error('Save API keys error:', error);
+
+			// Handle specific validation errors from server
+			let errorMessage =
+				'Failed to save configuration. Please try again.';
+
+			if (
+				error?.response?.data?.errors &&
+				Array.isArray(error.response.data.errors)
+			) {
+				errorMessage = error.response.data.errors.join('\n');
+			} else if (error?.response?.data?.message) {
+				errorMessage = error.response.data.message;
+			}
+
 			toast({
-				title: 'Error',
-				description: 'Failed to save configuration. Please try again.',
+				title: 'Validation Error',
+				description: errorMessage,
 				variant: 'destructive',
 			});
 		}

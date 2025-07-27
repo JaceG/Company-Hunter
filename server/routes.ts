@@ -1221,6 +1221,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 	const GOOGLE_PLACES_API_URL = 'https://places.googleapis.com/v1/places';
 	const API_KEY = process.env.GOOGLE_PLACES_API_KEY || '';
 
+	// Initialize default OpenAI client if system key is available
+	let defaultOpenAI: OpenAI | null = null;
+	if (process.env.OPENAI_API_KEY) {
+		defaultOpenAI = new OpenAI({
+			apiKey: process.env.OPENAI_API_KEY,
+		});
+	}
+
 	// Helper function to convert miles to meters for Google Places API
 	const milesToMeters = (miles: number) => Math.round(miles * 1609.34);
 
@@ -2428,7 +2436,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 	});
 
 	// Generate search suggestions based on current search
-	app.post('/api/businesses/suggestions', optionalAuth, async (req, res) => {
+	app.post('/api/businesses/suggestions', authenticate, async (req, res) => {
 		try {
 			const { jobRole } = req.body;
 
@@ -2439,7 +2447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 			}
 
 			// Use user's OpenAI key if available, otherwise use system key
-			let openaiToUse = openai;
+			let openaiToUse = defaultOpenAI;
 			if (req.user?.userId) {
 				const userApiKeys = await getApiKeys(req.user.userId);
 				if (userApiKeys?.openaiApiKey) {
@@ -2449,13 +2457,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 				}
 			}
 
-			if (
-				!process.env.OPENAI_API_KEY &&
-				(!req.user?.userId || !openaiToUse)
-			) {
+			if (!openaiToUse && !process.env.OPENAI_API_KEY) {
 				return res.status(400).json({
 					message:
 						'OpenAI API key is required. Please set up your API keys in Account Portal.',
+				});
+			}
+
+			// Create OpenAI client if we don't have one yet
+			if (!openaiToUse) {
+				openaiToUse = new OpenAI({
+					apiKey: process.env.OPENAI_API_KEY!,
 				});
 			}
 
