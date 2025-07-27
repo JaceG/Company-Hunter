@@ -17,8 +17,10 @@ import { SearchParams } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useStateSearch, useStateCities } from '@/hooks/useStateSearch';
 import { useApiKeys } from '@/hooks/useApiKeys';
-import { MapPin, Key, Sparkles, AlertCircle } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { MapPin, Key, Sparkles, AlertCircle, Search, User } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
+import QuotaExhaustedModal from './QuotaExhaustedModal';
 
 interface SearchPanelProps {
 	onSearch: (params: SearchParams) => void;
@@ -54,8 +56,10 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 	const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 	const [loadingCities, setLoadingCities] = useState(false);
 	const [sortBy, setSortBy] = useState<'size' | 'alphabetical'>('size');
+	const [showQuotaModal, setShowQuotaModal] = useState(false);
 
 	const { data: apiKeysStatus } = useApiKeys();
+	const { user, isAuthenticated } = useAuth();
 	const stateSearch = useStateSearch();
 	const stateCities = useStateCities();
 
@@ -77,6 +81,12 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 
 	const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
+
+		// Check if demo quota is exhausted
+		if (apiKeysStatus?.demoMode && apiKeysStatus?.searchesRemaining === 0) {
+			setShowQuotaModal(true);
+			return;
+		}
 
 		if (!searchParams.businessType.trim()) {
 			toast({
@@ -100,6 +110,12 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 	};
 
 	const handleStateSearch = async () => {
+		// Check if demo quota is exhausted
+		if (apiKeysStatus?.demoMode && apiKeysStatus?.searchesRemaining === 0) {
+			setShowQuotaModal(true);
+			return;
+		}
+
 		if (!stateParams.businessType.trim()) {
 			toast({
 				title: 'Business type is required',
@@ -109,7 +125,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 			return;
 		}
 
-		if (!apiKeysStatus?.hasGooglePlacesKey) {
+		if (!apiKeysStatus?.hasGooglePlacesKey && !apiKeysStatus?.demoMode) {
 			toast({
 				title: 'Google API key required',
 				description: 'Please set up your API keys first',
@@ -335,15 +351,88 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 				</CardTitle>
 			</CardHeader>
 			<CardContent className='space-y-4'>
-				{!apiKeysStatus?.hasGooglePlacesKey && (
-					<Alert className='mb-4'>
-						<Key className='h-4 w-4' />
-						<AlertDescription className='text-sm break-words'>
-							Google Places API key required for searching. Please
-							set up your API keys in Account Portal.
+				{!apiKeysStatus?.hasGooglePlacesKey &&
+					!apiKeysStatus?.demoMode && (
+						<Alert className='mb-4'>
+							<Key className='h-4 w-4' />
+							<AlertDescription className='text-sm break-words'>
+								Google Places API key required for searching.
+								Please set up your API keys in Account Portal.
+							</AlertDescription>
+						</Alert>
+					)}
+
+				{/* Demo Mode Quota Display */}
+				{apiKeysStatus?.demoMode && !isAuthenticated && (
+					<Alert className='mb-4 bg-blue-50 border-blue-200'>
+						<Search className='h-4 w-4 text-blue-600' />
+						<AlertDescription className='text-sm text-blue-800'>
+							<div className='flex items-center justify-between'>
+								<div>
+									<span className='font-medium'>
+										Demo Mode
+									</span>{' '}
+									-
+									{apiKeysStatus.searchesRemaining !==
+										undefined && (
+										<>
+											{' '}
+											{apiKeysStatus.searchesRemaining}/20
+											searches remaining
+										</>
+									)}
+								</div>
+								{apiKeysStatus.searchesRemaining !==
+									undefined && (
+									<div className='ml-2'>
+										<div className='w-16 bg-blue-200 rounded-full h-2'>
+											<div
+												className='bg-blue-600 h-2 rounded-full transition-all duration-300'
+												style={{
+													width: `${
+														(apiKeysStatus.searchesRemaining /
+															20) *
+														100
+													}%`,
+												}}></div>
+										</div>
+									</div>
+								)}
+							</div>
+							{apiKeysStatus.searchesRemaining === 0 && (
+								<div className='mt-2 text-sm'>
+									Quota exhausted.{' '}
+									<span
+										className='font-medium cursor-pointer hover:underline text-blue-700'
+										onClick={() => setShowQuotaModal(true)}>
+										Sign up to continue searching!
+									</span>
+								</div>
+							)}
 						</AlertDescription>
 					</Alert>
 				)}
+
+				{/* Authenticated User Status */}
+				{isAuthenticated &&
+					apiKeysStatus &&
+					!apiKeysStatus.demoMode && (
+						<Alert className='mb-4 bg-green-50 border-green-200'>
+							<User className='h-4 w-4 text-green-600' />
+							<AlertDescription className='text-sm text-green-800'>
+								<span className='font-medium'>
+									Personal Account
+								</span>{' '}
+								- Using your own API keys
+								{!apiKeysStatus.hasGooglePlacesKey && (
+									<div className='mt-1 text-green-700'>
+										⚠️ Configure your API keys in Account
+										Portal to start searching
+									</div>
+								)}
+							</AlertDescription>
+						</Alert>
+					)}
 
 				<Tabs defaultValue='single' className='w-full'>
 					<TabsList className='grid w-full grid-cols-2 text-xs'>
@@ -434,11 +523,17 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 								type='submit'
 								disabled={
 									isLoading ||
-									!apiKeysStatus?.hasGooglePlacesKey
+									(!apiKeysStatus?.hasGooglePlacesKey &&
+										!apiKeysStatus?.demoMode) ||
+									(apiKeysStatus?.demoMode &&
+										apiKeysStatus?.searchesRemaining === 0)
 								}
 								className='w-full'>
 								{isLoading
 									? 'Searching...'
+									: apiKeysStatus?.demoMode &&
+									  apiKeysStatus?.searchesRemaining === 0
+									? 'Quota Exhausted - Sign Up!'
 									: 'Search Businesses'}
 							</Button>
 						</form>
@@ -677,18 +772,30 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 								onClick={handleStateSearch}
 								disabled={
 									stateSearch.isPending ||
-									!apiKeysStatus?.hasGooglePlacesKey ||
-									selectedCities.length === 0
+									(!apiKeysStatus?.hasGooglePlacesKey &&
+										!apiKeysStatus?.demoMode) ||
+									selectedCities.length === 0 ||
+									(apiKeysStatus?.demoMode &&
+										apiKeysStatus?.searchesRemaining === 0)
 								}
 								className='w-full'>
 								{stateSearch.isPending
 									? 'Searching...'
+									: apiKeysStatus?.demoMode &&
+									  apiKeysStatus?.searchesRemaining === 0
+									? 'Quota Exhausted - Sign Up!'
 									: `Search ${selectedCities.length} Selected Cities`}
 							</Button>
 						</div>
 					</TabsContent>
 				</Tabs>
 			</CardContent>
+
+			{/* Quota Exhausted Modal */}
+			<QuotaExhaustedModal
+				isOpen={showQuotaModal}
+				onClose={() => setShowQuotaModal(false)}
+			/>
 		</Card>
 	);
 }
