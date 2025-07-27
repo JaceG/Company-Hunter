@@ -1318,3 +1318,32 @@ export async function migrateGuestDataToUser(
 	// Clean up guest data after successful migration
 	await deleteGuestData(guestId);
 }
+
+// Demo API Keys (Owner's keys for guest searches only)
+export function getDemoApiKeys(): {
+	googlePlacesApiKey: string;
+	openaiApiKey: string;
+	mongodbUri: string;
+} | null {
+	const demoGooglePlacesKey = process.env.DEMO_GOOGLE_PLACES_API_KEY;
+	const demoOpenAIKey = process.env.DEMO_OPENAI_API_KEY;
+	const demoMongoDbUri = process.env.DEMO_MONGODB_URI;
+
+	// All demo keys must be present for demo mode to work
+	if (!demoGooglePlacesKey || !demoOpenAIKey || !demoMongoDbUri) {
+		console.warn(
+			'Demo API keys not configured - demo mode will be disabled'
+		);
+		return null;
+	}
+
+	return {
+		googlePlacesApiKey: demoGooglePlacesKey,
+		openaiApiKey: demoOpenAIKey,
+		mongodbUri: demoMongoDbUri,
+	};
+}
+
+export function isDemoModeEnabled(): boolean {
+	return getDemoApiKeys() !== null;
+}
