@@ -42,13 +42,22 @@ import {
 	saveCachedSearchResult,
 	getCachedSearchResult,
 	cleanupExpiredCachedResults,
+	getDemoApiKeys,
+	isDemoModeEnabled,
+	incrementDemoSearchCount,
+	getDemoSearchStatus,
+	saveGuestResults,
 } from './mongodb';
-import { authenticate, optionalAuth } from './middleware/auth';
+import {
+	authenticate,
+	optionalAuth,
+	optionalUserOrGuest,
+} from './middleware/auth';
 import {
 	validateAndSanitizeApiKeys,
 	sanitizeSearchTerm,
 	sanitizeInput,
-} from './utils/security';
+} from './utils/security.js';
 
 // OpenAI client will be initialized per-request with user's API key
 
@@ -2038,402 +2047,571 @@ export async function registerRoutes(app: Express): Promise<Server> {
 		}
 	});
 
-	// Regular location-based search with intelligent caching
-	app.post('/api/businesses/search', optionalAuth, async (req, res) => {
-		try {
-			const searchParams = searchParamsSchema.parse(req.body);
-			const { businessType, location } = searchParams;
+	// Regular location-based search with intelligent caching (supports both users and guests)
+	app.post(
+		'/api/businesses/search',
+		optionalUserOrGuest,
+		async (req, res) => {
+			try {
+				const searchParams = searchParamsSchema.parse(req.body);
+				const { businessType, location } = searchParams;
 
-			// Use fixed values for radius and maxResults since they're not user-configurable
-			const radius = '20'; // 20 miles default radius
-			const maxResults = '100'; // 100 results default
+				// Use fixed values for radius and maxResults since they're not user-configurable
+				const radius = '20'; // 20 miles default radius
+				const maxResults = '100'; // 100 results default
 
-			// Generate search fingerprint for caching
-			const searchFingerprint = generateSearchFingerprint({
-				businessType,
-				location,
-				radius: Number(radius),
-				maxResults: Number(maxResults),
-			});
+				// Generate search fingerprint for caching
+				const searchFingerprint = generateSearchFingerprint({
+					businessType,
+					location,
+					radius: Number(radius),
+					maxResults: Number(maxResults),
+				});
 
-			// Check for cached results first
-			console.log(
-				`Checking cache for search fingerprint: ${searchFingerprint}`
-			);
-			const cachedResult = await getCachedSearchResult(searchFingerprint);
-
-			if (cachedResult) {
+				// Check for cached results first
 				console.log(
-					`Found cached results for ${businessType} in ${location}. Returning ${cachedResult.businesses.length} cached businesses.`
+					`Checking cache for search fingerprint: ${searchFingerprint}`
+				);
+				const cachedResult = await getCachedSearchResult(
+					searchFingerprint
 				);
 
-				// Clear existing in-memory storage and load cached results
-				await storage.clearAllBusinesses();
-				const businessesToStore = cachedResult.businesses.map((b) => ({
-					name: b.name,
-					website: b.website || '',
-					location: b.location,
-					distance: b.distance,
-					isBadLead: b.isBadLead,
-					notes: b.notes,
-					careerLink: b.careerLink,
-				}));
-
-				const savedBusinesses = await storage.saveBatchBusinesses(
-					businessesToStore
-				);
-
-				return res.json({
-					businesses: savedBusinesses,
-					total: cachedResult.totalResults,
-					cached: true,
-					cacheAge: Math.round(
-						(Date.now() -
-							new Date(cachedResult.createdAt).getTime()) /
-							(1000 * 60)
-					), // Age in minutes
-				});
-			}
-
-			console.log(
-				`No cached results found. Proceeding with fresh API search.`
-			);
-
-			// Clear all existing businesses before performing a new search
-			await storage.clearAllBusinesses();
-
-			// Get user's API keys - no fallbacks to environment variables
-			if (!req.user?.userId) {
-				return res.status(401).json({
-					message:
-						'Authentication required. Please log in to use search features.',
-				});
-			}
-
-			const userApiKeys = await getApiKeys(req.user.userId);
-			const googleApiKey = userApiKeys?.googlePlacesApiKey;
-			const openaiApiKey = userApiKeys?.openaiApiKey;
-
-			if (!googleApiKey) {
-				return res.status(400).json({
-					message:
-						'Google Places API key is required. Please configure your API keys in Account Portal.',
-				});
-			}
-
-			if (!openaiApiKey) {
-				return res.status(400).json({
-					message:
-						'OpenAI API key is required for state-wide searches. Please configure your API keys in Account Portal.',
-				});
-			}
-
-			const maxResultsNum = Number(maxResults);
-			const businesses = [];
-			let nextPageToken = null;
-
-			// Use Text Search API for all searches - much better coverage and reliability
-			const textQuery = `${businessType} in ${location}`;
-			console.log(`Searching for: "${textQuery}"`);
-
-			do {
-				const requestBody = {
-					textQuery: textQuery,
-					maxResultCount: Math.min(
-						20,
-						maxResultsNum - businesses.length
-					),
-				};
-
-				if (nextPageToken) {
-					requestBody.pageToken = nextPageToken;
-					await new Promise((resolve) => setTimeout(resolve, 2000));
-				}
-
-				console.log(
-					`Making Google Places API (New) call with query: "${textQuery}"`
-				);
-				const placesResponse = await fetch(
-					`${GOOGLE_PLACES_API_URL}:searchText`,
-					{
-						method: 'POST',
-						headers: {
-							'Content-Type': 'application/json',
-							'X-Goog-Api-Key': googleApiKey,
-							'X-Goog-FieldMask':
-								'places.id,places.displayName,places.websiteUri,places.formattedAddress,nextPageToken',
-						},
-						body: JSON.stringify(requestBody),
-					}
-				);
-				const placesData = await placesResponse.json();
-
-				console.log(
-					`Google Places API (New) response status: ${placesResponse.status}`
-				);
-				if (placesData.error) {
+				if (cachedResult) {
 					console.log(
-						`Google Places API error: ${JSON.stringify(
-							placesData.error
-						)}`
+						`Found cached results for ${businessType} in ${location}. Returning ${cachedResult.businesses.length} cached businesses.`
 					);
-					return res.status(400).json({
-						message: 'Failed to search businesses',
-						details:
-							placesData.error.message ||
-							'Unknown Google Places API error',
-					});
-				}
 
-				if (!placesResponse.ok) {
-					return res.status(400).json({
-						message: 'Failed to search businesses',
-						details: `HTTP ${placesResponse.status}: ${placesResponse.statusText}`,
-					});
-				}
-
-				nextPageToken = placesData.nextPageToken || null;
-				const pageResults = placesData.places || [];
-
-				console.log(`Found ${pageResults.length} places in this page`);
-
-				// Process results for new API format
-				for (const place of pageResults) {
-					businesses.push({
-						name: place.displayName?.text || 'Unknown Business',
-						website: place.websiteUri || '',
-						location: place.formattedAddress || '',
-						distance: `${radius} mi radius`,
-						isBadLead: false,
-						notes: '',
-						careerLink: place.websiteUri
-							? `${place.websiteUri.replace(/\/+$/, '')}/careers`
-							: '',
-					});
-				}
-			} while (nextPageToken && businesses.length < maxResultsNum);
-
-			// Get user's saved businesses if user is logged in
-			let userSavedBusinesses: any[] = [];
-			if (req.user && req.user.userId) {
-				try {
-					userSavedBusinesses = await getSavedBusinesses(
-						req.user.userId
-					);
-					console.log(
-						`Found ${userSavedBusinesses.length} saved businesses for user ${req.user.userId}`
-					);
-				} catch (err) {
-					console.error(
-						'Error fetching saved businesses for duplicate check:',
-						err
-					);
-				}
-			}
-
-			// Clear ALL previous search results before saving new ones
-			await storage.clearAllBusinesses();
-
-			// Store the results for later retrieval (this will be the only results in storage)
-			const savedBusinesses = await storage.saveBatchBusinesses(
-				businesses
-			);
-
-			// For marking duplicates based on user's saved businesses
-			if (userSavedBusinesses.length > 0) {
-				for (const business of savedBusinesses) {
-					const isDuplicate = userSavedBusinesses.some(
-						(savedBusiness) => {
-							// Check website match (normalize domains first)
-							if (business.website && savedBusiness.website) {
-								const normalizeUrl = (url: string) => {
-									return url
-										.toLowerCase()
-										.replace(/^https?:\/\//i, '')
-										.replace(/^www\./i, '')
-										.replace(/\/+$/, '');
-								};
-
-								const businessDomain = normalizeUrl(
-									business.website
-								);
-								const savedDomain = normalizeUrl(
-									savedBusiness.website
-								);
-
-								if (businessDomain === savedDomain) return true;
-							}
-
-							// Check name match (normalize company names)
-							if (business.name && savedBusiness.name) {
-								const normalizeName = (name: string) => {
-									return name
-										.toLowerCase()
-										.replace(
-											/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i,
-											''
-										)
-										.trim();
-								};
-
-								const businessName = normalizeName(
-									business.name
-								);
-								const savedName = normalizeName(
-									savedBusiness.name
-								);
-
-								if (businessName === savedName) return true;
-							}
-
-							// Check location match (normalize locations)
-							if (business.location && savedBusiness.location) {
-								const normalizeLocation = (
-									location: string
-								) => {
-									return (
-										location
-											.toLowerCase()
-											// Remove apartment/suite numbers
-											.replace(/(\s|,)+suite\s+\w+/i, '')
-											.replace(/(\s|,)+ste\.?\s+\w+/i, '')
-											.replace(/(\s|,)+apt\.?\s+\w+/i, '')
-											.replace(/(\s|,)+unit\s+\w+/i, '')
-											.replace(/(\s|,)+#\s*\w+/i, '')
-											// Remove floor indicators
-											.replace(/(\s|,)+floor\s+\w+/i, '')
-											.replace(/(\s|,)+fl\.?\s+\w+/i, '')
-											// Remove room numbers
-											.replace(/(\s|,)+room\s+\w+/i, '')
-											.replace(/(\s|,)+rm\.?\s+\w+/i, '')
-											// Standardize address components
-											.replace(/\bstreet\b/i, 'st')
-											.replace(/\bavenue\b/i, 'ave')
-											.replace(/\bboulevard\b/i, 'blvd')
-											.replace(/\bsuite\b/i, 'ste')
-											.trim()
-									);
-								};
-
-								const businessLocation = normalizeLocation(
-									business.location
-								);
-								const savedLocation = normalizeLocation(
-									savedBusiness.location
-								);
-
-								// Check if the core address matches
-								if (businessLocation === savedLocation)
-									return true;
-
-								// Attempt to extract city and state/zip if full match fails
-								const extractCityState = (location: string) => {
-									// Try to get city, state from address
-									const cityStateMatch = location.match(
-										/([^,]+),\s*([^,]+)(?:,\s*([^,]+))?$/
-									);
-									if (cityStateMatch) {
-										const city = cityStateMatch[1]
-											?.trim()
-											.toLowerCase();
-										const state = cityStateMatch[2]
-											?.trim()
-											.toLowerCase();
-										return { city, state };
-									}
-									return { city: '', state: '' };
-								};
-
-								const businessAddr =
-									extractCityState(businessLocation);
-								const savedAddr =
-									extractCityState(savedLocation);
-
-								// If we have both city and state and they match, it's likely the same location
-								if (
-									businessAddr.city &&
-									businessAddr.state &&
-									businessAddr.city === savedAddr.city &&
-									businessAddr.state === savedAddr.state
-								) {
-									return true;
-								}
-							}
-
-							return false;
+					// For guest users, auto-save results and check quota
+					if (req.guest?.guestId) {
+						const quotaStatus = await getDemoSearchStatus(
+							req.guest.guestId
+						);
+						if (!quotaStatus.canSearch) {
+							return res.status(429).json({
+								message:
+									'Demo search limit reached. Please sign up to continue searching.',
+								quotaExhausted: true,
+								searchesUsed: quotaStatus.count,
+								searchesRemaining: quotaStatus.remaining,
+							});
 						}
+
+						// Increment quota for guest search (even for cached results)
+						const quotaResult = await incrementDemoSearchCount(
+							req.guest.guestId
+						);
+
+						// Auto-save guest search results
+						await saveGuestResults({
+							guestId: req.guest.guestId,
+							businesses: cachedResult.businesses,
+							searchParams: {
+								businessType,
+								location,
+								radius: Number(radius),
+							},
+							searchFingerprint,
+							totalResults: cachedResult.totalResults,
+						});
+
+						console.log(
+							`Guest search: ${quotaResult.remaining} searches remaining`
+						);
+					}
+
+					// Clear existing in-memory storage and load cached results
+					await storage.clearAllBusinesses();
+					const businessesToStore = cachedResult.businesses.map(
+						(b) => ({
+							name: b.name,
+							website: b.website || '',
+							location: b.location,
+							distance: b.distance,
+							isBadLead: b.isBadLead,
+							notes: b.notes,
+							careerLink: b.careerLink,
+						})
 					);
 
-					// Update the business with isDuplicate flag if it's a duplicate
-					if (isDuplicate && business.id) {
-						await storage.updateBusiness(business.id, {
-							isDuplicate: true,
+					const savedBusinesses = await storage.saveBatchBusinesses(
+						businessesToStore
+					);
+
+					return res.json({
+						businesses: savedBusinesses,
+						total: cachedResult.totalResults,
+						cached: true,
+						cacheAge: Math.round(
+							(Date.now() -
+								new Date(cachedResult.createdAt).getTime()) /
+								(1000 * 60)
+						), // Age in minutes
+						isGuest: !!req.guest?.guestId,
+						searchesRemaining: req.guest?.guestId
+							? (await getDemoSearchStatus(req.guest.guestId))
+									.remaining
+							: undefined,
+					});
+				}
+
+				console.log(
+					`No cached results found. Proceeding with fresh API search.`
+				);
+
+				// Clear all existing businesses before performing a new search
+				await storage.clearAllBusinesses();
+
+				// Determine API keys to use (user keys vs demo keys)
+				let googleApiKey: string;
+				let openaiApiKey: string;
+
+				if (req.user?.userId) {
+					// Authenticated user - use their API keys
+					const userApiKeys = await getApiKeys(req.user.userId);
+					googleApiKey = userApiKeys?.googlePlacesApiKey;
+					openaiApiKey = userApiKeys?.openaiApiKey;
+
+					if (!googleApiKey) {
+						return res.status(400).json({
+							message:
+								'Google Places API key is required. Please configure your API keys in Account Portal.',
 						});
 					}
+
+					if (!openaiApiKey) {
+						return res.status(400).json({
+							message:
+								'OpenAI API key is required. Please configure your API keys in Account Portal.',
+						});
+					}
+				} else if (req.guest?.guestId) {
+					// Guest user - check quota and use demo keys
+					const quotaStatus = await getDemoSearchStatus(
+						req.guest.guestId
+					);
+					if (!quotaStatus.canSearch) {
+						return res.status(429).json({
+							message:
+								'Demo search limit reached. Please sign up to continue searching.',
+							quotaExhausted: true,
+							searchesUsed: quotaStatus.count,
+							searchesRemaining: quotaStatus.remaining,
+						});
+					}
+
+					// Use demo API keys
+					const demoKeys = getDemoApiKeys();
+					if (!demoKeys) {
+						return res.status(503).json({
+							message:
+								'Demo mode is currently unavailable. Please sign up to use your own API keys.',
+						});
+					}
+
+					googleApiKey = demoKeys.googlePlacesApiKey;
+					openaiApiKey = demoKeys.openaiApiKey;
+
+					// Increment quota for guest search
+					const quotaResult = await incrementDemoSearchCount(
+						req.guest.guestId
+					);
+					console.log(
+						`Guest search: ${quotaResult.remaining} searches remaining`
+					);
+				} else {
+					// No authentication at all
+					return res.status(401).json({
+						message:
+							'Authentication required. Please log in or try our demo mode.',
+					});
 				}
-			} else {
-				// Fall back to the regular duplicate check with stored businesses
-				await storage.checkForDuplicates(savedBusinesses);
-			}
 
-			// Get the updated businesses with duplicate flags
-			const updatedBusinesses = await storage.getBusinesses();
-			const newBusinesses = updatedBusinesses.filter((b) =>
-				savedBusinesses.some((saved) => saved.id === b.id)
-			);
+				const maxResultsNum = Number(maxResults);
+				const businesses = [];
+				let nextPageToken = null;
 
-			// Save results to persistent cache for future searches
-			try {
-				await saveCachedSearchResult({
-					searchFingerprint,
-					searchParams: {
-						businessType,
-						location,
-						radius: Number(radius),
-						maxResults: Number(maxResults),
-					},
-					businesses: newBusinesses.map((b) => ({
-						name: b.name,
-						website: b.website || '',
-						location: b.location,
-						distance: b.distance,
-						isBadLead: b.isBadLead,
-						notes: b.notes,
-						careerLink: b.careerLink,
-					})),
-					totalResults: newBusinesses.length,
-					userId: req.user?.userId, // Optional user association
+				// Use Text Search API for all searches - much better coverage and reliability
+				const textQuery = `${businessType} in ${location}`;
+				console.log(`Searching for: "${textQuery}"`);
+
+				do {
+					const requestBody = {
+						textQuery: textQuery,
+						maxResultCount: Math.min(
+							20,
+							maxResultsNum - businesses.length
+						),
+					};
+
+					if (nextPageToken) {
+						requestBody.pageToken = nextPageToken;
+						await new Promise((resolve) =>
+							setTimeout(resolve, 2000)
+						);
+					}
+
+					console.log(
+						`Making Google Places API (New) call with query: "${textQuery}"`
+					);
+					const placesResponse = await fetch(
+						`${GOOGLE_PLACES_API_URL}:searchText`,
+						{
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+								'X-Goog-Api-Key': googleApiKey,
+								'X-Goog-FieldMask':
+									'places.id,places.displayName,places.websiteUri,places.formattedAddress,nextPageToken',
+							},
+							body: JSON.stringify(requestBody),
+						}
+					);
+					const placesData = await placesResponse.json();
+
+					console.log(
+						`Google Places API (New) response status: ${placesResponse.status}`
+					);
+					if (placesData.error) {
+						console.log(
+							`Google Places API error: ${JSON.stringify(
+								placesData.error
+							)}`
+						);
+						return res.status(400).json({
+							message: 'Failed to search businesses',
+							details:
+								placesData.error.message ||
+								'Unknown Google Places API error',
+						});
+					}
+
+					if (!placesResponse.ok) {
+						return res.status(400).json({
+							message: 'Failed to search businesses',
+							details: `HTTP ${placesResponse.status}: ${placesResponse.statusText}`,
+						});
+					}
+
+					nextPageToken = placesData.nextPageToken || null;
+					const pageResults = placesData.places || [];
+
+					console.log(
+						`Found ${pageResults.length} places in this page`
+					);
+
+					// Process results for new API format
+					for (const place of pageResults) {
+						businesses.push({
+							name: place.displayName?.text || 'Unknown Business',
+							website: place.websiteUri || '',
+							location: place.formattedAddress || '',
+							distance: `${radius} mi radius`,
+							isBadLead: false,
+							notes: '',
+							careerLink: place.websiteUri
+								? `${place.websiteUri.replace(
+										/\/+$/,
+										''
+								  )}/careers`
+								: '',
+						});
+					}
+				} while (nextPageToken && businesses.length < maxResultsNum);
+
+				// Get user's saved businesses if user is logged in
+				let userSavedBusinesses: any[] = [];
+				if (req.user && req.user.userId) {
+					try {
+						userSavedBusinesses = await getSavedBusinesses(
+							req.user.userId
+						);
+						console.log(
+							`Found ${userSavedBusinesses.length} saved businesses for user ${req.user.userId}`
+						);
+					} catch (err) {
+						console.error(
+							'Error fetching saved businesses for duplicate check:',
+							err
+						);
+					}
+				}
+
+				// Clear ALL previous search results before saving new ones
+				await storage.clearAllBusinesses();
+
+				// Store the results for later retrieval (this will be the only results in storage)
+				const savedBusinesses = await storage.saveBatchBusinesses(
+					businesses
+				);
+
+				// For marking duplicates based on user's saved businesses
+				if (userSavedBusinesses.length > 0) {
+					for (const business of savedBusinesses) {
+						const isDuplicate = userSavedBusinesses.some(
+							(savedBusiness) => {
+								// Check website match (normalize domains first)
+								if (business.website && savedBusiness.website) {
+									const normalizeUrl = (url: string) => {
+										return url
+											.toLowerCase()
+											.replace(/^https?:\/\//i, '')
+											.replace(/^www\./i, '')
+											.replace(/\/+$/, '');
+									};
+
+									const businessDomain = normalizeUrl(
+										business.website
+									);
+									const savedDomain = normalizeUrl(
+										savedBusiness.website
+									);
+
+									if (businessDomain === savedDomain)
+										return true;
+								}
+
+								// Check name match (normalize company names)
+								if (business.name && savedBusiness.name) {
+									const normalizeName = (name: string) => {
+										return name
+											.toLowerCase()
+											.replace(
+												/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i,
+												''
+											)
+											.trim();
+									};
+
+									const businessName = normalizeName(
+										business.name
+									);
+									const savedName = normalizeName(
+										savedBusiness.name
+									);
+
+									if (businessName === savedName) return true;
+								}
+
+								// Check location match (normalize locations)
+								if (
+									business.location &&
+									savedBusiness.location
+								) {
+									const normalizeLocation = (
+										location: string
+									) => {
+										return (
+											location
+												.toLowerCase()
+												// Remove apartment/suite numbers
+												.replace(
+													/(\s|,)+suite\s+\w+/i,
+													''
+												)
+												.replace(
+													/(\s|,)+ste\.?\s+\w+/i,
+													''
+												)
+												.replace(
+													/(\s|,)+apt\.?\s+\w+/i,
+													''
+												)
+												.replace(
+													/(\s|,)+unit\s+\w+/i,
+													''
+												)
+												.replace(/(\s|,)+#\s*\w+/i, '')
+												// Remove floor indicators
+												.replace(
+													/(\s|,)+floor\s+\w+/i,
+													''
+												)
+												.replace(
+													/(\s|,)+fl\.?\s+\w+/i,
+													''
+												)
+												// Remove room numbers
+												.replace(
+													/(\s|,)+room\s+\w+/i,
+													''
+												)
+												.replace(
+													/(\s|,)+rm\.?\s+\w+/i,
+													''
+												)
+												// Standardize address components
+												.replace(/\bstreet\b/i, 'st')
+												.replace(/\bavenue\b/i, 'ave')
+												.replace(
+													/\bboulevard\b/i,
+													'blvd'
+												)
+												.replace(/\bsuite\b/i, 'ste')
+												.trim()
+										);
+									};
+
+									const businessLocation = normalizeLocation(
+										business.location
+									);
+									const savedLocation = normalizeLocation(
+										savedBusiness.location
+									);
+
+									// Check if the core address matches
+									if (businessLocation === savedLocation)
+										return true;
+
+									// Attempt to extract city and state/zip if full match fails
+									const extractCityState = (
+										location: string
+									) => {
+										// Try to get city, state from address
+										const cityStateMatch = location.match(
+											/([^,]+),\s*([^,]+)(?:,\s*([^,]+))?$/
+										);
+										if (cityStateMatch) {
+											const city = cityStateMatch[1]
+												?.trim()
+												.toLowerCase();
+											const state = cityStateMatch[2]
+												?.trim()
+												.toLowerCase();
+											return { city, state };
+										}
+										return { city: '', state: '' };
+									};
+
+									const businessAddr =
+										extractCityState(businessLocation);
+									const savedAddr =
+										extractCityState(savedLocation);
+
+									// If we have both city and state and they match, it's likely the same location
+									if (
+										businessAddr.city &&
+										businessAddr.state &&
+										businessAddr.city === savedAddr.city &&
+										businessAddr.state === savedAddr.state
+									) {
+										return true;
+									}
+								}
+
+								return false;
+							}
+						);
+
+						// Update the business with isDuplicate flag if it's a duplicate
+						if (isDuplicate && business.id) {
+							await storage.updateBusiness(business.id, {
+								isDuplicate: true,
+							});
+						}
+					}
+				} else {
+					// Fall back to the regular duplicate check with stored businesses
+					await storage.checkForDuplicates(savedBusinesses);
+				}
+
+				// Get the updated businesses with duplicate flags
+				const updatedBusinesses = await storage.getBusinesses();
+				const newBusinesses = updatedBusinesses.filter((b) =>
+					savedBusinesses.some((saved) => saved.id === b.id)
+				);
+
+				// Save results to persistent cache for future searches
+				try {
+					await saveCachedSearchResult({
+						searchFingerprint,
+						searchParams: {
+							businessType,
+							location,
+							radius: Number(radius),
+							maxResults: Number(maxResults),
+						},
+						businesses: newBusinesses.map((b) => ({
+							name: b.name,
+							website: b.website || '',
+							location: b.location,
+							distance: b.distance,
+							isBadLead: b.isBadLead,
+							notes: b.notes,
+							careerLink: b.careerLink,
+						})),
+						totalResults: newBusinesses.length,
+						userId: req.user?.userId, // Optional user association
+					});
+					console.log(
+						`Cached search results for fingerprint: ${searchFingerprint}`
+					);
+				} catch (cacheError) {
+					console.error(
+						'Error saving search results to cache:',
+						cacheError
+					);
+					// Don't fail the request if caching fails
+				}
+
+				// Auto-save guest search results
+				if (req.guest?.guestId) {
+					try {
+						await saveGuestResults({
+							guestId: req.guest.guestId,
+							businesses: newBusinesses.map((b) => ({
+								name: b.name,
+								website: b.website || '',
+								location: b.location,
+								distance: b.distance,
+								isBadLead: b.isBadLead,
+								notes: b.notes,
+								careerLink: b.careerLink,
+							})),
+							searchParams: {
+								businessType,
+								location,
+								radius: Number(radius),
+							},
+							searchFingerprint,
+							totalResults: newBusinesses.length,
+						});
+						console.log(
+							`Auto-saved ${newBusinesses.length} guest search results`
+						);
+					} catch (saveError) {
+						console.error(
+							'Error auto-saving guest results:',
+							saveError
+						);
+						// Don't fail the request if saving fails
+					}
+				}
+
+				res.json({
+					businesses: newBusinesses,
+					total: newBusinesses.length,
+					cached: false,
+					isGuest: !!req.guest?.guestId,
+					searchesRemaining: req.guest?.guestId
+						? (await getDemoSearchStatus(req.guest.guestId))
+								.remaining
+						: undefined,
 				});
-				console.log(
-					`Cached search results for fingerprint: ${searchFingerprint}`
-				);
-			} catch (cacheError) {
-				console.error(
-					'Error saving search results to cache:',
-					cacheError
-				);
-				// Don't fail the request if caching fails
-			}
+			} catch (error) {
+				if (error instanceof ZodError) {
+					const validationError = fromZodError(error);
+					return res
+						.status(400)
+						.json({ message: validationError.message });
+				}
 
-			res.json({
-				businesses: newBusinesses,
-				total: newBusinesses.length,
-				cached: false,
-			});
-		} catch (error) {
-			if (error instanceof ZodError) {
-				const validationError = fromZodError(error);
-				return res
-					.status(400)
-					.json({ message: validationError.message });
+				console.error('Error searching businesses:', error);
+				res.status(500).json({
+					message: 'An error occurred while searching for businesses',
+				});
 			}
-
-			console.error('Error searching businesses:', error);
-			res.status(500).json({
-				message: 'An error occurred while searching for businesses',
-			});
 		}
-	});
+	);
 
 	// Generate search suggestions based on current search
 	app.post('/api/businesses/suggestions', authenticate, async (req, res) => {
