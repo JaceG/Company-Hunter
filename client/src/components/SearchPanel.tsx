@@ -162,9 +162,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 				businessType: stateParams.businessType,
 				location: `${selectedCities.join(', ')} (${
 					selectedCities.length
-				} cities)`,
-				radius: 'custom',
-				maxResults: `${result.total} results (up to 20 per city)`,
+				} cities) - ${result.total} results`,
 			});
 		} catch (error) {
 			console.error('State search error:', error);
@@ -230,7 +228,10 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 		}
 	};
 
-	const getCitiesForState = async (state: string) => {
+	const getCitiesForState = async (
+		state: string,
+		sortType?: 'size' | 'alphabetical'
+	) => {
 		if (!apiKeysStatus?.hasOpenaiKey) {
 			toast({
 				title: 'OpenAI API key required',
@@ -243,10 +244,11 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 
 		try {
 			setLoadingCities(true);
+			const actualSortBy = sortType || sortBy;
 			const result = await stateCities.mutateAsync({
 				state,
 				maxCities: 500,
-				sortBy: sortBy,
+				sortBy: actualSortBy,
 			});
 			setAvailableCities(result.cities || []);
 			setSelectedCities([]);
@@ -256,7 +258,9 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 				description: `Found ${
 					result.count
 				} cities in ${state}, sorted by ${
-					sortBy === 'size' ? 'population size' : 'alphabetical order'
+					actualSortBy === 'size'
+						? 'population size'
+						: 'alphabetical order'
 				}. Select up to 5 cities to search.`,
 			});
 		} catch (error) {
@@ -647,7 +651,8 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 													availableCities.length > 0
 												) {
 													getCitiesForState(
-														stateParams.state
+														stateParams.state,
+														'size'
 													);
 												}
 											}}
@@ -669,7 +674,8 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 													availableCities.length > 0
 												) {
 													getCitiesForState(
-														stateParams.state
+														stateParams.state,
+														'alphabetical'
 													);
 												}
 											}}

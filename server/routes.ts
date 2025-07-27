@@ -1229,6 +1229,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 	// Google Places API endpoint
 	const GOOGLE_PLACES_API_URL = 'https://places.googleapis.com/v1/places';
+	const GOOGLE_GEOCODING_API_URL =
+		'https://maps.googleapis.com/maps/api/geocode/json';
 	const API_KEY = process.env.GOOGLE_PLACES_API_KEY || '';
 
 	// Initialize default OpenAI client if system key is available
@@ -1653,12 +1655,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 				);
 
 				if (searchBusinesses.length === 0) {
-					return res
-						.status(400)
-						.json({
-							message:
-								'No businesses to import from search results',
-						});
+					return res.status(400).json({
+						message: 'No businesses to import from search results',
+					});
 				}
 
 				if (req.user?.userId) {
@@ -1996,162 +1995,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 		return businesses;
 	}
-
-	// State-based search with top 100 cities
-	app.post('/api/businesses/search/state', authenticate, async (req, res) => {
-		try {
-			const stateSearchParams = stateSearchParamsSchema.parse(req.body);
-			const { businessType, state, maxCities, maxResults } =
-				stateSearchParams;
-
-			// Get user's API keys
-			const userId = req.user!.userId;
-			const userApiKeys = await getApiKeys(userId);
-
-			const googleApiKey =
-				userApiKeys?.googlePlacesApiKey ||
-				process.env.GOOGLE_PLACES_API_KEY;
-			const openaiApiKey =
-				userApiKeys?.openaiApiKey || process.env.OPENAI_API_KEY;
-
-			if (!googleApiKey) {
-				return res.status(400).json({
-					message:
-						'Google Places API key is required. Please set up your API keys in the app settings.',
-				});
-			}
-
-			if (!openaiApiKey) {
-				return res.status(400).json({
-					message:
-						'OpenAI API key is required for generating state city lists. Please set up your API keys in the app settings.',
-				});
-			}
-
-			// Initialize OpenAI with user's key
-			const userOpenai = new OpenAI({ apiKey: openaiApiKey });
-
-			// Get top cities for the state
-			let cities: string[] = [];
-			try {
-				const response = await userOpenai.chat.completions.create({
-					model: 'gpt-4o',
-					messages: [
-						{
-							role: 'system',
-							content:
-								'You are a geography expert. Return only a JSON array of strings, no other text.',
-						},
-						{
-							role: 'user',
-							content: `Provide a comprehensive list of the top ${maxCities} cities in ${state} for business searches. Include major cities, mid-size cities, suburbs, county seats, and regional business centers. Start with the largest cities and include important business areas. Format as a JSON array of city names only (no state abbreviation).`,
-						},
-					],
-					response_format: { type: 'json_object' },
-				});
-
-				const result = JSON.parse(
-					response.choices[0].message.content || '{"cities": []}'
-				);
-				cities =
-					result.cities && result.cities.length > 0
-						? result.cities.slice(0, maxCities)
-						: [`${state} cities`];
-			} catch (error) {
-				console.error(`Error generating cities for ${state}:`, error);
-				return res.status(500).json({
-					message: `Failed to generate city list for ${state}. Please check your OpenAI API key.`,
-				});
-			}
-
-			// Clear existing search results
-			await storage.clearAllBusinesses();
-
-			const businesses = [];
-			let searchedCities = 0;
-
-			for (const city of cities) {
-				if (businesses.length >= Number(maxResults)) break;
-
-				const textQuery = `${businessType} in ${city}, ${state}`;
-
-				try {
-					const requestBody = {
-						textQuery: textQuery,
-						maxResultCount: 3, // Max 3 per city
-					};
-
-					const placesResponse = await fetch(
-						`${GOOGLE_PLACES_API_URL}:searchText`,
-						{
-							method: 'POST',
-							headers: {
-								'Content-Type': 'application/json',
-								'X-Goog-Api-Key': googleApiKey,
-								'X-Goog-FieldMask':
-									'places.id,places.displayName,places.websiteUri,places.formattedAddress',
-							},
-							body: JSON.stringify(requestBody),
-						}
-					);
-					const placesData = await placesResponse.json();
-
-					if (placesResponse.ok && placesData.places) {
-						for (const place of placesData.places) {
-							if (businesses.length >= Number(maxResults)) break;
-
-							businesses.push({
-								name:
-									place.displayName?.text ||
-									'Unknown Business',
-								website: place.websiteUri || '',
-								location: place.formattedAddress || '',
-								distance: `${city}, ${state}`,
-								isBadLead: false,
-								notes: '',
-								isDuplicate: false,
-								careerLink: place.websiteUri
-									? `${place.websiteUri.replace(
-											/\/+$/,
-											''
-									  )}/careers`
-									: '',
-							});
-						}
-					}
-
-					searchedCities++;
-
-					// Small delay to respect rate limits
-					if (searchedCities % 10 === 0) {
-						await new Promise((resolve) =>
-							setTimeout(resolve, 1000)
-						);
-					}
-				} catch (cityError) {
-					console.error(`Error searching ${city}:`, cityError);
-					continue;
-				}
-			}
-
-			// Store results and check for duplicates with user's saved businesses
-			const savedBusinesses = await storage.saveBatchBusinesses(
-				businesses
-			);
-
-			res.json({
-				businesses: savedBusinesses,
-				total: savedBusinesses.length,
-				searchedCities,
-				totalCities: cities.length,
-			});
-		} catch (error) {
-			console.error('Error in state search:', error);
-			res.status(500).json({
-				message: 'An error occurred during state search',
-			});
-		}
-	});
 
 	// Regular location-based search with intelligent caching (supports both users and guests)
 	app.post(
@@ -2695,7 +2538,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 	});
 
 	// Generate search suggestions based on current search
-	app.post('/api/businesses/suggestions', authenticate, async (req, res) => {
+	app.post('/api/businesses/suggestions', optionalAuth, async (req, res) => {
 		try {
 			const { jobRole } = req.body;
 
@@ -2705,30 +2548,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
 				});
 			}
 
-			// Use user's OpenAI key if available, otherwise use system key
-			let openaiToUse = defaultOpenAI;
+			// Get OpenAI API key from user, system, or demo keys
+			let openaiApiKey: string | undefined;
+
 			if (req.user?.userId) {
+				// Authenticated user - get their API keys
 				const userApiKeys = await getApiKeys(req.user.userId);
-				if (userApiKeys?.openaiApiKey) {
-					openaiToUse = new OpenAI({
-						apiKey: userApiKeys.openaiApiKey,
-					});
+				openaiApiKey = userApiKeys?.openaiApiKey;
+			}
+
+			// Fall back to system key if no user key
+			if (!openaiApiKey) {
+				openaiApiKey = process.env.OPENAI_API_KEY;
+			}
+
+			// Check for demo keys if no user or system key
+			if (!openaiApiKey) {
+				const demoKeys = getDemoApiKeys();
+				if (demoKeys?.openaiApiKey) {
+					openaiApiKey = demoKeys.openaiApiKey;
 				}
 			}
 
-			if (!openaiToUse && !process.env.OPENAI_API_KEY) {
+			if (!openaiApiKey) {
 				return res.status(400).json({
 					message:
-						'OpenAI API key is required. Please set up your API keys in Account Portal.',
+						'OpenAI API key is required. Please set up your API keys in Account Portal or use demo mode.',
 				});
 			}
 
-			// Create OpenAI client if we don't have one yet
-			if (!openaiToUse) {
-				openaiToUse = new OpenAI({
-					apiKey: process.env.OPENAI_API_KEY!,
-				});
-			}
+			// Create OpenAI client with the resolved API key
+			const openaiToUse = new OpenAI({
+				apiKey: openaiApiKey,
+			});
 
 			console.log('Generating search suggestions...');
 
@@ -2857,12 +2709,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 				return res.status(400).json({ message: 'State is required' });
 			}
 
-			// Get user's API keys for OpenAI (needed for city generation) or use system keys
+			// Get user's API keys for OpenAI (needed for city generation) or use system/demo keys
 			let openaiApiKey = process.env.OPENAI_API_KEY;
 			if (req.user?.userId) {
 				const userApiKeys = await getApiKeys(req.user.userId);
 				if (userApiKeys?.openaiApiKey) {
 					openaiApiKey = userApiKeys.openaiApiKey;
+				}
+			}
+
+			// If no user or system key, check for demo keys (for guest users)
+			if (!openaiApiKey) {
+				const demoKeys = getDemoApiKeys();
+				if (demoKeys?.openaiApiKey) {
+					openaiApiKey = demoKeys.openaiApiKey;
 				}
 			}
 
@@ -2873,12 +2733,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 				});
 			}
 
-			// Generate up to 500 cities for selection (users can choose up to 5 for actual search)
-			let cities = await getTopCitiesForState(state, maxCities);
+			// Create OpenAI client instance
+			const openaiClient = new OpenAI({
+				apiKey: openaiApiKey,
+			});
 
-			// Apply sorting based on request
+			// Generate up to 500 cities for selection (users can choose up to 5 for actual search)
+			let cities = await getTopCitiesForState(
+				state,
+				maxCities,
+				openaiClient
+			);
+
+			// Apply sorting based on request (create copy to avoid mutating cache)
 			if (sortBy === 'alphabetical') {
-				cities = cities.sort((a, b) => a.localeCompare(b));
+				cities = [...cities].sort((a, b) => a.localeCompare(b)); // Create copy before sorting!
 			}
 			// Default is already by size from OpenAI response
 
@@ -2921,6 +2790,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 			// Enforce limits for performance - hard limits
 			const limitedMaxCities = Math.min(maxCities, 5); // Maximum 5 cities for optimal performance
+			const limitedMaxResults = 50; // Maximum results to return per search
 
 			// Generate search fingerprint for caching
 			const searchFingerprint = generateSearchFingerprint({
@@ -2975,40 +2845,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
 				`No cached results found. Proceeding with fresh API search.`
 			);
 
-			// Get user's API keys - no fallbacks to environment variables
-			if (!req.user?.userId) {
-				return res.status(401).json({
-					message:
-						'Authentication required. Please log in to use search features.',
-				});
+			// For guest users, check demo quota before proceeding
+			if (req.guest?.guestId) {
+				const quotaStatus = await getDemoSearchStatus(
+					req.guest.guestId
+				);
+				if (!quotaStatus.canSearch) {
+					return res.status(429).json({
+						message:
+							'Demo search limit reached. Please sign up to continue searching.',
+						quotaExhausted: true,
+						searchesUsed: quotaStatus.count,
+						searchesRemaining: quotaStatus.remaining,
+					});
+				}
 			}
 
-			const userApiKeys = await getApiKeys(req.user.userId);
-			const googleApiKey = userApiKeys?.googlePlacesApiKey;
-			const openaiApiKey = userApiKeys?.openaiApiKey;
+			// Get API keys for authenticated users, or use demo keys for guests
+			let googleApiKey: string | undefined;
+			let openaiApiKey: string | undefined;
+
+			if (req.user?.userId) {
+				// Authenticated user - get their API keys
+				const userApiKeys = await getApiKeys(req.user.userId);
+				googleApiKey = userApiKeys?.googlePlacesApiKey;
+				openaiApiKey = userApiKeys?.openaiApiKey;
+			}
+
+			// Check for demo keys if user keys not available
+			if (!googleApiKey || !openaiApiKey) {
+				const demoKeys = getDemoApiKeys();
+				if (demoKeys) {
+					if (!googleApiKey)
+						googleApiKey = demoKeys.googlePlacesApiKey;
+					if (!openaiApiKey) openaiApiKey = demoKeys.openaiApiKey;
+				}
+			}
 
 			if (!googleApiKey) {
 				return res.status(400).json({
 					message:
-						'Google Places API key is required. Please configure your API keys in Account Portal.',
+						'Google Places API key is required. Please configure your API keys in Account Portal or use demo mode.',
 				});
 			}
 
 			if (!openaiApiKey) {
 				return res.status(400).json({
 					message:
-						'OpenAI API key is required for state-wide searches. Please configure your API keys in Account Portal.',
+						'OpenAI API key is required for state-wide searches. Please configure your API keys in Account Portal or use demo mode.',
 				});
 			}
 
 			// Use selected cities if provided, otherwise get top cities for the state
 			let cities;
+			let allCities;
 			if (selectedCities && selectedCities.length > 0) {
 				cities = selectedCities.slice(0, 5); // Limit to 5 cities max
+				allCities = selectedCities; // Use all selected cities for count
 				console.log(`Using ${cities.length} selected cities:`, cities);
 			} else {
+				// Create OpenAI client instance
+				const openaiClient = new OpenAI({
+					apiKey: openaiApiKey,
+				});
+
 				// Get top cities for the state (dynamically generated, cached for 24 hours)
-				const allCities = await getTopCitiesForState(state, 10); // Generate max 10 cities, use only 5
+				allCities = await getTopCitiesForState(state, 10, openaiClient); // Generate max 10 cities, use only 5
 				if (allCities.length === 0) {
 					return res.status(400).json({
 						message: `Unable to find cities for "${state}". Please try a different state or check your OpenAI API key.`,
@@ -3041,43 +2943,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 					try {
 						searchedCities++;
 
-						// Check geocoding cache first (24-hour cache)
-						const cityKey = `${city}, ${state}`.toLowerCase();
-						let geocodeData;
-
-						if (geocodeCache.has(cityKey)) {
-							geocodeData = geocodeCache.get(cityKey);
-						} else {
-							const geocodeUrl = `${GOOGLE_GEOCODING_API_URL}?address=${encodeURIComponent(
-								`${city}, ${state}`
-							)}&key=${googleApiKey}`;
-							const geocodeResponse = await fetch(geocodeUrl);
-							geocodeData = await geocodeResponse.json();
-
-							// Cache for 24 hours to prevent repeated geocoding calls
-							if (geocodeData.status === 'OK') {
-								geocodeCache.set(cityKey, geocodeData);
-								setTimeout(
-									() => geocodeCache.delete(cityKey),
-									24 * 60 * 60 * 1000
-								);
-							}
-						}
-
-						if (
-							geocodeData.status !== 'OK' ||
-							!geocodeData.results?.[0]
-						) {
-							console.warn(`Failed to geocode ${city}, ${state}`);
-							return [];
-						}
-
-						const { lat, lng } =
-							geocodeData.results[0].geometry.location;
-
-						// Check places cache (1-hour cache)
+						// Check places cache (1-hour cache) - use city/state/businessType for caching
 						const placesKey =
-							`${lat},${lng}-${businessType}`.toLowerCase();
+							`${city}-${state}-${businessType}`.toLowerCase();
 						let placesData;
 
 						if (businessDetailsCache.has(placesKey)) {
@@ -3213,6 +3081,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 			} catch (error) {
 				console.error('Error saving search results to cache:', error);
 				// Don't fail the request if caching fails
+			}
+
+			// Increment quota for guest users after successful search
+			if (req.guest?.guestId) {
+				try {
+					await incrementDemoSearchCount(req.guest.guestId);
+				} catch (error) {
+					console.error(
+						'Error incrementing demo search count:',
+						error
+					);
+					// Don't fail the request if quota increment fails
+				}
 			}
 
 			res.json({
