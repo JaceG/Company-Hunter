@@ -44,6 +44,11 @@ import {
 	cleanupExpiredCachedResults,
 } from './mongodb';
 import { authenticate, optionalAuth } from './middleware/auth';
+import {
+	validateAndSanitizeApiKeys,
+	sanitizeSearchTerm,
+	sanitizeInput,
+} from './utils/security';
 
 // OpenAI client will be initialized per-request with user's API key
 
@@ -1350,10 +1355,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 			const userId = req.user!.userId;
 			const { googlePlacesApiKey, openaiApiKey, mongodbUri } = req.body;
 
+			// Validate and sanitize API keys
+			const validation = validateAndSanitizeApiKeys({
+				googlePlacesApiKey,
+				openaiApiKey,
+				mongodbUri,
+			});
+
+			if (!validation.isValid) {
+				return res.status(400).json({
+					message: 'Invalid API key format',
+					errors: validation.errors,
+				});
+			}
+
+			// Use sanitized values
 			const apiKeys = await saveApiKeys(userId, {
-				googlePlacesApiKey: googlePlacesApiKey || undefined,
-				openaiApiKey: openaiApiKey || undefined,
-				mongodbUri: mongodbUri || undefined,
+				googlePlacesApiKey: validation.sanitized.googlePlacesApiKey,
+				openaiApiKey: validation.sanitized.openaiApiKey,
+				mongodbUri: validation.sanitized.mongodbUri,
 			});
 
 			// Don't send actual keys back

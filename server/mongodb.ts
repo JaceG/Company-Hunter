@@ -1,3 +1,7 @@
+// Load environment variables from .env file
+import dotenv from 'dotenv';
+dotenv.config();
+
 import { MongoClient, Db, ObjectId } from 'mongodb';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -13,8 +17,33 @@ import crypto from 'crypto';
 
 // MongoDB connection string - REQUIRED for application to function
 const MONGODB_URI = process.env.MONGODB_URI || process.env.DATABASE_URL;
-const JWT_SECRET =
-	process.env.JWT_SECRET || 'business-search-token-secret-2025';
+
+// JWT Secret configuration with enhanced security
+const JWT_SECRET = (() => {
+	const envSecret = process.env.JWT_SECRET;
+	const defaultSecret = 'business-search-token-secret-2025';
+
+	// In production, require a proper JWT secret
+	if (process.env.NODE_ENV === 'production') {
+		if (!envSecret || envSecret === defaultSecret) {
+			console.error(
+				'SECURITY ERROR: JWT_SECRET must be set to a strong, unique value in production!'
+			);
+			console.error(
+				'Generate a secure secret with: openssl rand -base64 32'
+			);
+			process.exit(1);
+		}
+		if (envSecret.length < 32) {
+			console.error(
+				'SECURITY ERROR: JWT_SECRET must be at least 32 characters long in production!'
+			);
+			process.exit(1);
+		}
+	}
+
+	return envSecret || defaultSecret;
+})();
 
 if (!MONGODB_URI) {
 	console.error('MongoDB connection string not found.');
@@ -877,9 +906,7 @@ export async function getApiKeys(userId: string): Promise<ApiKeys | null> {
 	};
 }
 
-export async function getApiKeysStatus(
-	userId: string
-): Promise<{
+export async function getApiKeysStatus(userId: string): Promise<{
 	hasGooglePlacesKey: boolean;
 	hasOpenaiKey: boolean;
 	hasMongodbUri: boolean;

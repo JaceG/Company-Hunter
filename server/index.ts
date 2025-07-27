@@ -1,66 +1,89 @@
+// Load environment variables from .env file
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express, { type Request, Response, NextFunction } from 'express';
+import helmet from 'helmet';
+import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import { registerRoutes } from './routes';
 import { setupVite, serveStatic, log } from './vite';
 
 const app = express();
 
+// Security: Rate limiting to prevent DoS attacks
+const limiter = rateLimit({
+	windowMs: 15 * 60 * 1000, // 15 minutes
+	max: 100, // limit each IP to 100 requests per windowMs
+	message: {
+		error: 'Too many requests from this IP, please try again later.',
+	},
+	standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+	legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+
+// Security: Apply rate limiting to all API routes
+app.use('/api/', limiter);
+
+// Security: Add comprehensive security headers with helmet
+app.use(
+	helmet({
+		contentSecurityPolicy: {
+			directives: {
+				defaultSrc: ["'self'"],
+				styleSrc: [
+					"'self'",
+					"'unsafe-inline'",
+					'https://fonts.googleapis.com',
+				],
+				fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+				imgSrc: ["'self'", 'data:', 'https:'],
+				scriptSrc: ["'self'", "'unsafe-inline'"],
+				connectSrc: [
+					"'self'",
+					'https://places.googleapis.com',
+					'https://api.openai.com',
+				],
+			},
+		},
+		crossOriginEmbedderPolicy: false, // Allow embedding for development
+	})
+);
+
+// Security: CORS configuration
+const corsOptions = {
+	origin: function (
+		origin: string | undefined,
+		callback: (err: Error | null, allow?: boolean) => void
+	) {
+		const allowedOrigins =
+			process.env.NODE_ENV === 'production'
+				? [process.env.CLIENT_URL || 'https://yourdomain.com']
+				: [
+						'http://localhost:3000',
+						'http://localhost:3001',
+						'http://localhost:5173',
+				  ];
+
+		// Allow requests with no origin (like mobile apps or curl requests)
+		if (!origin) return callback(null, true);
+
+		if (allowedOrigins.includes(origin)) {
+			callback(null, true);
+		} else {
+			callback(new Error('Not allowed by CORS'), false);
+		}
+	},
+	credentials: true,
+	methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+	allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+};
+
+app.use(cors(corsOptions));
+
 // Security: Add request size limits to prevent DoS attacks
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: false, limit: '10mb' }));
-
-// Security: Basic CORS configuration
-app.use((req, res, next) => {
-	// Allow requests from development and production origins
-	const allowedOrigins =
-		process.env.NODE_ENV === 'production'
-			? [process.env.CLIENT_URL || 'https://yourdomain.com']
-			: [
-					'http://localhost:3000',
-					'http://localhost:5000',
-					'http://localhost:5173',
-			  ];
-
-	const origin = req.headers.origin;
-	if (allowedOrigins.includes(origin || '')) {
-		res.setHeader('Access-Control-Allow-Origin', origin || '*');
-	}
-
-	res.setHeader(
-		'Access-Control-Allow-Methods',
-		'GET, POST, PUT, DELETE, PATCH, OPTIONS'
-	);
-	res.setHeader(
-		'Access-Control-Allow-Headers',
-		'Content-Type, Authorization'
-	);
-	res.setHeader('Access-Control-Allow-Credentials', 'true');
-
-	// Handle preflight requests
-	if (req.method === 'OPTIONS') {
-		res.sendStatus(200);
-		return;
-	}
-
-	next();
-});
-
-// Security: Basic security headers
-app.use((req, res, next) => {
-	res.setHeader('X-Content-Type-Options', 'nosniff');
-	res.setHeader('X-Frame-Options', 'DENY');
-	res.setHeader('X-XSS-Protection', '1; mode=block');
-	res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-
-	// Only set HSTS in production with HTTPS
-	if (process.env.NODE_ENV === 'production') {
-		res.setHeader(
-			'Strict-Transport-Security',
-			'max-age=31536000; includeSubDomains'
-		);
-	}
-
-	next();
-});
 
 // API request logging middleware
 app.use((req, res, next) => {
@@ -104,7 +127,7 @@ app.use((req, res, next) => {
 		// Log full error details for debugging (server-side only)
 		console.error('Error:', err);
 
-		// Only send generic error message to client
+		// Only send generic error message to client for server errors
 		if (status >= 500) {
 			res.status(status).json({ message: 'Internal Server Error' });
 		} else {
@@ -121,15 +144,13 @@ app.use((req, res, next) => {
 		serveStatic(app);
 	}
 
-	// ALWAYS serve the app on port 5000
-	// this serves both the API and the client.
-	// It is the only port that is not firewalled.
-	const port = 5000;
+	// ALWAYS serve the app on port 3000
+	// Port 5000 conflicts with macOS Control Center
+	const port = 3000;
 	server.listen(
 		{
 			port,
-			host: '0.0.0.0',
-			reusePort: true,
+			host: '127.0.0.1',
 		},
 		() => {
 			log(`serving on port ${port}`);
