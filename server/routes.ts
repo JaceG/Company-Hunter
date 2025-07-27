@@ -1355,8 +1355,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 	// Get user's API keys status or demo mode availability
 	app.get('/api/auth/api-keys', optionalUserOrGuest, async (req, res) => {
 		try {
+			console.log(
+				'API keys endpoint called - req.user:',
+				!!req.user,
+				'req.guest:',
+				!!req.guest
+			);
+
 			if (req.user?.userId) {
 				// Authenticated user - return their API key status
+				console.log('Returning authenticated user API keys status');
 				const userId = req.user.userId;
 				const status = await getApiKeysStatus(userId);
 				res.json({
@@ -1366,6 +1374,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 				});
 			} else if (req.guest?.guestId) {
 				// Guest user - return demo mode availability
+				console.log(
+					'Returning guest demo mode status for guest:',
+					req.guest.guestId
+				);
 				const demoAvailable = isDemoModeEnabled();
 				if (demoAvailable) {
 					const quotaStatus = await getDemoSearchStatus(
@@ -1382,6 +1394,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 						canSearch: quotaStatus.canSearch,
 					});
 				} else {
+					console.log('Demo mode not available');
 					res.json({
 						hasGooglePlacesKey: false,
 						hasOpenaiKey: false,
@@ -1393,6 +1406,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 				}
 			} else {
 				// No authentication - still show demo availability
+				console.log(
+					'No user or guest found, returning demo availability'
+				);
 				const demoAvailable = isDemoModeEnabled();
 				res.json({
 					hasGooglePlacesKey: demoAvailable,
