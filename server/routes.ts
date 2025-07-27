@@ -47,6 +47,7 @@ import {
 	incrementDemoSearchCount,
 	getDemoSearchStatus,
 	saveGuestResults,
+	getGuestBusinesses,
 } from './mongodb';
 import {
 	authenticate,
@@ -1638,72 +1639,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
 		}
 	});
 
-	// Import businesses from search results
+	// Import businesses from search results (works for both authenticated users and guests)
 	app.post(
 		'/api/my/businesses/import-from-search',
-		authenticate,
+		optionalUserOrGuest,
 		async (req, res) => {
 			try {
-				const userId = req.user!.userId;
-
-				console.log(`Import request from user: ${userId}`);
-
 				// Get the businesses from the search results
 				const searchBusinesses = await storage.getBusinesses();
 
 				console.log(
 					`Found ${searchBusinesses.length} businesses in search results`
 				);
-				console.log(
-					'Sample search businesses:',
-					searchBusinesses.slice(0, 3).map((b) => ({ name: b.name }))
-				);
 
-				// Convert them to saved businesses format
-				const businessesToImport = searchBusinesses.map((b) => ({
-					name: b.name,
-					website: b.website || '',
-					location: b.location || '',
-					distance: b.distance || '',
-					notes: b.notes || '',
-					careerLink: b.careerLink || '',
-					userId,
-				}));
-
-				console.log(
-					`After filtering, ${businessesToImport.length} businesses to import`
-				);
-
-				if (businessesToImport.length === 0) {
-					console.log(
-						'No businesses to import - all may be marked as bad leads'
-					);
+				if (searchBusinesses.length === 0) {
 					return res
 						.status(400)
-						.json({ message: 'No valid businesses to import' });
+						.json({
+							message:
+								'No businesses to import from search results',
+						});
 				}
 
-				const result = await importBusinessesForUser(
-					userId,
-					businessesToImport,
-					{
-						skipDuplicates: false, // Import all businesses, don't skip duplicates
-						replaceDuplicates: false,
-					}
-				);
+				if (req.user?.userId) {
+					// Authenticated user - save to their personal list
+					const userId = req.user.userId;
+					console.log(
+						`Import request from authenticated user: ${userId}`
+					);
 
-				console.log(
-					`Import result: ${result.count} businesses imported`
-				);
+					// Convert them to saved businesses format
+					const businessesToImport = searchBusinesses.map((b) => ({
+						name: b.name,
+						website: b.website || '',
+						location: b.location || '',
+						distance: b.distance || '',
+						notes: b.notes || '',
+						careerLink: b.careerLink || '',
+						userId,
+					}));
 
-				res.status(201).json({
-					message: `Successfully imported ${result.count} businesses`,
-					businesses: result.businesses,
-				});
+					const result = await importBusinessesForUser(
+						userId,
+						businessesToImport,
+						{
+							skipDuplicates: false,
+							replaceDuplicates: false,
+						}
+					);
+
+					console.log(
+						`Import result: ${result.count} businesses imported for user`
+					);
+
+					res.status(201).json({
+						message: `Successfully imported ${result.count} businesses`,
+						businesses: result.businesses,
+					});
+				} else if (req.guest?.guestId) {
+					// Guest user - save to guest results
+					console.log(
+						`Import request from guest: ${req.guest.guestId}`
+					);
+
+					// Create search fingerprint based on current search
+					const searchFingerprint = generateSearchFingerprint({
+						businessType: 'imported',
+						location: 'search results',
+						radius: 20,
+						maxResults: searchBusinesses.length,
+					});
+
+					// Save guest results
+					await saveGuestResults({
+						guestId: req.guest.guestId,
+						businesses: searchBusinesses.map((b) => ({
+							name: b.name,
+							website: b.website || '',
+							location: b.location,
+							distance: b.distance,
+							isBadLead: b.isBadLead,
+							notes: b.notes,
+							careerLink: b.careerLink,
+						})),
+						searchParams: {
+							businessType: 'imported',
+							location: 'search results',
+						},
+						searchFingerprint,
+						totalResults: searchBusinesses.length,
+					});
+
+					console.log(
+						`Guest results saved: ${searchBusinesses.length} businesses`
+					);
+
+					res.status(201).json({
+						message: `Successfully saved ${searchBusinesses.length} businesses to demo list`,
+						businesses: searchBusinesses,
+					});
+				} else {
+					return res.status(401).json({
+						message: 'Authentication required to save businesses',
+					});
+				}
 			} catch (error) {
 				console.error('Error importing businesses:', error);
 				res.status(500).json({
-					message: 'An error occurred while importing businesses',
+					message: 'An error occurred while saving businesses',
 				});
 			}
 		}
@@ -2144,7 +2187,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 						`Found cached results for ${businessType} in ${location}. Returning ${cachedResult.businesses.length} cached businesses.`
 					);
 
-					// For guest users, auto-save results and check quota
+					// For guest users, check quota but don't auto-save
 					if (req.guest?.guestId) {
 						const quotaStatus = await getDemoSearchStatus(
 							req.guest.guestId
@@ -2163,19 +2206,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 						const quotaResult = await incrementDemoSearchCount(
 							req.guest.guestId
 						);
-
-						// Auto-save guest search results
-						await saveGuestResults({
-							guestId: req.guest.guestId,
-							businesses: cachedResult.businesses,
-							searchParams: {
-								businessType,
-								location,
-								radius: Number(radius),
-							},
-							searchFingerprint,
-							totalResults: cachedResult.totalResults,
-						});
 
 						console.log(
 							`Guest search: ${quotaResult.remaining} searches remaining`
@@ -2616,39 +2646,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 					// Don't fail the request if caching fails
 				}
 
-				// Auto-save guest search results
-				if (req.guest?.guestId) {
-					try {
-						await saveGuestResults({
-							guestId: req.guest.guestId,
-							businesses: newBusinesses.map((b) => ({
-								name: b.name,
-								website: b.website || '',
-								location: b.location,
-								distance: b.distance,
-								isBadLead: b.isBadLead,
-								notes: b.notes,
-								careerLink: b.careerLink,
-							})),
-							searchParams: {
-								businessType,
-								location,
-								radius: Number(radius),
-							},
-							searchFingerprint,
-							totalResults: newBusinesses.length,
-						});
-						console.log(
-							`Auto-saved ${newBusinesses.length} guest search results`
-						);
-					} catch (saveError) {
-						console.error(
-							'Error auto-saving guest results:',
-							saveError
-						);
-						// Don't fail the request if saving fails
-					}
-				}
+				// Guest results will only be saved when "Add to my company list" is clicked
 
 				res.json({
 					businesses: newBusinesses,
