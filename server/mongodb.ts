@@ -205,6 +205,50 @@ export function verifyToken(token: string): { userId: string; email: string } {
 	}
 }
 
+// Guest JWT Functions for demo functionality
+export function generateGuestToken(): string {
+	// Generate a unique guest ID using crypto
+	const guestId = crypto.randomUUID();
+
+	// Create JWT token for guest with 24 hour expiration
+	const token = jwt.sign(
+		{
+			guestId,
+			isGuest: true,
+			// Guests get shorter expiration than registered users
+		},
+		JWT_SECRET,
+		{ expiresIn: '24h' }
+	);
+
+	return token;
+}
+
+export function verifyGuestToken(token: string): {
+	guestId: string;
+	isGuest: boolean;
+	exp: number;
+	iat: number;
+} {
+	try {
+		const decoded = jwt.verify(token, JWT_SECRET) as {
+			guestId: string;
+			isGuest: boolean;
+			exp: number;
+			iat: number;
+		};
+
+		// Verify it's actually a guest token
+		if (!decoded.isGuest || !decoded.guestId) {
+			throw new Error('Invalid guest token format');
+		}
+
+		return decoded;
+	} catch (error) {
+		throw new Error('Invalid or expired guest token');
+	}
+}
+
 // Saved Business Functions
 export async function saveBusiness(
 	business: SavedBusiness

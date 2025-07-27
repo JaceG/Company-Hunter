@@ -6,6 +6,7 @@ import express, { type Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 import { registerRoutes } from './routes';
 import { setupVite, serveStatic, log } from './vite';
 
@@ -80,6 +81,9 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Parse cookies for guest authentication
+app.use(cookieParser());
 
 // Security: Add request size limits to prevent DoS attacks
 app.use(express.json({ limit: '10mb' }));
