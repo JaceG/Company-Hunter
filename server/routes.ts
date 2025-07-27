@@ -48,12 +48,15 @@ import {
 	getDemoSearchStatus,
 	saveGuestResults,
 	getGuestBusinesses,
+	getGuestResults,
+	migrateGuestDataToUser,
 } from './mongodb';
 import {
 	authenticate,
 	optionalAuth,
 	optionalUserOrGuest,
 } from './middleware/auth';
+import { verifyGuestToken } from './mongodb';
 import {
 	validateAndSanitizeApiKeys,
 	sanitizeSearchTerm,
@@ -1257,6 +1260,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 			const result = await createUser(userData);
 
+			// Check for guest token to migrate data
+			const guestToken = req.cookies?.guestToken;
+			console.log('Registration: Guest token present:', !!guestToken);
+			if (guestToken) {
+				try {
+					const decoded = verifyGuestToken(guestToken);
+					console.log('Registration: Decoded guest token:', decoded);
+					if (decoded.guestId) {
+						console.log(
+							`Migrating guest data from ${decoded.guestId} to user ${result.user._id}`
+						);
+
+						// Check if guest has any data to migrate
+						const guestResults = await getGuestResults(
+							decoded.guestId
+						);
+						console.log(
+							`Found ${guestResults.length} guest results to migrate`
+						);
+
+						await migrateGuestDataToUser(
+							decoded.guestId,
+							result.user._id!
+						);
+						console.log(
+							`Guest data migration completed successfully - migrated ${guestResults.length} search results`
+						);
+
+						// Clear the guest cookie since data has been migrated
+						res.clearCookie('guestToken');
+					}
+				} catch (guestError) {
+					console.warn(
+						'Failed to migrate guest data during registration:',
+						guestError
+					);
+					// Don't fail registration if guest migration fails
+				}
+			} else {
+				console.log(
+					'Registration: No guest token found in cookies:',
+					Object.keys(req.cookies || {})
+				);
+			}
+
 			// Don't send password back to client
 			const { user } = result;
 			const userWithoutPassword = { ...user };
@@ -1280,7 +1328,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 			console.error('Error registering user:', error);
 
-			if (error.message === 'Email already registered') {
+			if ((error as Error).message === 'Email already registered') {
 				return res
 					.status(409)
 					.json({ message: 'Email already registered' });

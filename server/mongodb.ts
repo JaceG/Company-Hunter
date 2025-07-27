@@ -104,6 +104,9 @@ export async function connectToMongoDB(): Promise<Db> {
 			.collection(COLLECTIONS.DEMO_SEARCHES)
 			.createIndex({ guestId: 1 }, { unique: true });
 		await db
+			.collection(COLLECTIONS.DEMO_SEARCHES)
+			.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+		await db
 			.collection(COLLECTIONS.GUEST_RESULTS)
 			.createIndex(
 				{ guestId: 1, searchFingerprint: 1 },
@@ -1140,6 +1143,7 @@ export async function incrementDemoSearchCount(
 	);
 
 	const now = new Date();
+	const expiresAt = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 days from now
 
 	// Upsert the demo search record
 	const result = await demoSearchesCollection.findOneAndUpdate(
@@ -1147,7 +1151,11 @@ export async function incrementDemoSearchCount(
 		{
 			$inc: { count: 1 },
 			$set: { lastSearchAt: now },
-			$setOnInsert: { firstSearchAt: now, createdAt: now },
+			$setOnInsert: {
+				firstSearchAt: now,
+				createdAt: now,
+				expiresAt: expiresAt,
+			},
 		},
 		{
 			upsert: true,

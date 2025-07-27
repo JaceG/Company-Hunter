@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { useRegister } from '@/hooks/useAuth';
 import { Loader2, SearchX, Sparkles, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { queryClient } from '@/lib/queryClient';
 
 interface QuotaExhaustedModalProps {
 	isOpen: boolean;
@@ -38,8 +39,14 @@ export default function QuotaExhaustedModal({
 			toast({
 				title: 'Account Created Successfully!',
 				description:
-					'Welcome! You can now search unlimited businesses with your own API keys.',
+					'Welcome! Your guest data has been transferred to your account. Set up your API keys to continue searching.',
 			});
+
+			// Invalidate API keys query to refresh status for new user
+			queryClient.invalidateQueries({ queryKey: ['/api/auth/api-keys'] });
+
+			// Invalidate saved businesses to show migrated data
+			queryClient.invalidateQueries({ queryKey: ['/api/my/businesses'] });
 
 			// Clear form
 			setEmail('');

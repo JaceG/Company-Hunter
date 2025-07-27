@@ -188,6 +188,7 @@ export const demoSearchSchema = z.object({
 	count: z.number().int().min(0).max(100), // Prevent abuse
 	firstSearchAt: z.date(),
 	lastSearchAt: z.date(),
+	expiresAt: z.date().optional(), // 90-day automatic cleanup
 	createdAt: z.date().optional(),
 	updatedAt: z.date().optional(),
 });

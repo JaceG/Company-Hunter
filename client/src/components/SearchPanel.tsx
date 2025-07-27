@@ -528,9 +528,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 								disabled={
 									isLoading ||
 									(!apiKeysStatus?.hasGooglePlacesKey &&
-										!apiKeysStatus?.demoMode) ||
-									(apiKeysStatus?.demoMode &&
-										apiKeysStatus?.searchesRemaining === 0)
+										!apiKeysStatus?.demoMode)
 								}
 								className='w-full'>
 								{isLoading
@@ -780,9 +778,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
 									stateSearch.isPending ||
 									(!apiKeysStatus?.hasGooglePlacesKey &&
 										!apiKeysStatus?.demoMode) ||
-									selectedCities.length === 0 ||
-									(apiKeysStatus?.demoMode &&
-										apiKeysStatus?.searchesRemaining === 0)
+									selectedCities.length === 0
 								}
 								className='w-full'>
 								{stateSearch.isPending
