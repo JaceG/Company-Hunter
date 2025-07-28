@@ -59,7 +59,10 @@ const corsOptions = {
 	) {
 		const allowedOrigins =
 			process.env.NODE_ENV === 'production'
-				? [process.env.CLIENT_URL || 'https://yourdomain.com']
+				? [
+						'https://company-hunter.onrender.com',
+						process.env.CLIENT_URL,
+				  ].filter(Boolean) // Remove undefined values
 				: [
 						'http://localhost:3000',
 						'http://localhost:3001',
