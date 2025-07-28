@@ -1600,8 +1600,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 			// Make sure business belongs to this user
 			// Get user's businesses and find the one with matching ID
-			const userBusinesses = await getSavedBusinesses(userId);
-			const business = userBusinesses.find((b) => b._id === businessId);
+			const userBusinessesResult = await getSavedBusinesses(userId);
+			const business = userBusinessesResult.businesses.find(
+				(b) => b._id === businessId
+			);
 
 			if (!business) {
 				return res.status(404).json({ message: 'Business not found' });

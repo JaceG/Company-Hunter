@@ -12,6 +12,9 @@ import { setupVite, serveStatic, log } from './vite';
 
 const app = express();
 
+// Trust proxy for Render deployment (fixes rate limiting X-Forwarded-For header issue)
+app.set('trust proxy', true);
+
 // Security: Rate limiting to prevent DoS attacks
 const limiter = rateLimit({
 	windowMs: 15 * 60 * 1000, // 15 minutes
