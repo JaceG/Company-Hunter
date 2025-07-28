@@ -148,13 +148,16 @@ app.use((req, res, next) => {
 		serveStatic(app);
 	}
 
-	// ALWAYS serve the app on port 3000
+	// Use Render's PORT environment variable in production, fallback to 3000 for local development
 	// Port 5000 conflicts with macOS Control Center
-	const port = 3000;
+	const port = parseInt(process.env.PORT || '3000', 10);
+	const host =
+		process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1';
+
 	server.listen(
 		{
 			port,
-			host: '127.0.0.1',
+			host,
 		},
 		() => {
 			log(`serving on port ${port}`);
