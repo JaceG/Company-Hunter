@@ -46,6 +46,7 @@ app.use(
 					"'self'",
 					"'unsafe-inline'",
 					'https://static.hotjar.com',
+					'https://script.hotjar.com',
 				],
 				connectSrc: [
 					"'self'",
