@@ -8,7 +8,7 @@ import Home from '@/pages/Home';
 import AccountPortal from './pages/AccountPortal';
 import { useAuth, useLogin, useRegister, useLogout } from './hooks/useAuth';
 import { useHotjar } from './hooks/useHotjar';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
 	Dialog,
 	DialogContent,
@@ -231,6 +231,25 @@ function Header() {
 function App() {
 	// Initialize Hotjar tracking for SPA route changes
 	useHotjar();
+
+	// Debug: Add test event trigger (remove after verification)
+	const [hasTriggeredTest, setHasTriggeredTest] = useState(false);
+
+	useEffect(() => {
+		if (hasTriggeredTest) return;
+
+		const triggerTestEvent = () => {
+			if (typeof window !== 'undefined' && window.hj) {
+				console.log('🔥 Hotjar: Triggering test event - app-loaded');
+				window.hj('event', 'app-loaded');
+				setHasTriggeredTest(true);
+			} else {
+				setTimeout(triggerTestEvent, 1000);
+			}
+		};
+
+		setTimeout(triggerTestEvent, 2000); // Wait 2s then try
+	}, [hasTriggeredTest]);
 
 	return (
 		<QueryClientProvider client={queryClient}>
