@@ -1729,7 +1729,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 		async (req, res) => {
 			try {
 				// Get the businesses from the search results
-				const searchBusinesses = await storage.getBusinesses();
+				const allSearchBusinesses = await storage.getBusinesses();
+
+				// Check if specific business IDs were provided (for filtered imports)
+				const { businessIds } = req.body;
+				let searchBusinesses = allSearchBusinesses;
+
+				if (businessIds && Array.isArray(businessIds)) {
+					// Filter to only include the specified business IDs
+					searchBusinesses = allSearchBusinesses.filter(
+						(business) =>
+							business.id && businessIds.includes(business.id)
+					);
+					console.log(
+						`Filtering to ${
+							searchBusinesses.length
+						} businesses from ${
+							allSearchBusinesses.length
+						} total (IDs: ${businessIds.join(', ')})`
+					);
+				}
 
 				console.log(
 					`Found ${searchBusinesses.length} businesses in search results`

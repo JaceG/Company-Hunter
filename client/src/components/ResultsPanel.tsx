@@ -365,12 +365,19 @@ export default function ResultsPanel({
 									size='sm'
 									onClick={async () => {
 										try {
-											await importFromSearch.mutateAsync();
+											// Get IDs of filtered businesses (respects the duplicate toggle)
+											const businessIds =
+												filteredBusinesses
+													.filter((b) => b.id)
+													.map((b) => b.id!);
+
+											await importFromSearch.mutateAsync(
+												businessIds
+											);
 
 											toast({
 												title: 'Companies Saved',
-												description:
-													'Search results have been added to your company list',
+												description: `${businessIds.length} search results have been added to your company list`,
 											});
 										} catch (error) {
 											toast({
@@ -397,7 +404,8 @@ export default function ResultsPanel({
 										<polyline points='17 21 17 13 7 13 7 21'></polyline>
 										<polyline points='7 3 7 8 15 8'></polyline>
 									</svg>
-									Add to My Company List
+									Add to My Company List (
+									{filteredBusinesses.length})
 								</Button>
 							</div>
 						</div>

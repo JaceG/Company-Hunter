@@ -57,10 +57,11 @@ export function useImportFromSearch() {
 	const queryClient = useQueryClient();
 
 	return useMutation({
-		mutationFn: async () => {
+		mutationFn: async (businessIds?: number[]) => {
 			return await apiRequest(
 				'POST',
-				'/api/my/businesses/import-from-search'
+				'/api/my/businesses/import-from-search',
+				businessIds ? { businessIds } : {}
 			);
 		},
 		onSuccess: () => {

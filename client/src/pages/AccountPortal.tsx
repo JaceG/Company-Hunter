@@ -61,7 +61,7 @@ import {
 import ApiKeySetup from '@/components/ApiKeySetup';
 import { useApiKeys } from '@/hooks/useApiKeys';
 import { useToast } from '@/hooks/use-toast';
-import { queryClient } from '@/lib/queryClient';
+import { queryClient, apiRequest } from '@/lib/queryClient';
 
 export default function AccountPortal() {
 	const { user, isLoading: isAuthLoading, isAuthenticated } = useAuth();
@@ -314,22 +314,60 @@ export default function AccountPortal() {
 		}
 	};
 
-	const exportCSV = () => {
-		if (filteredBusinesses.length > 0) {
-			const csvContent = exportToCSV(
-				filteredBusinesses.map((b: SavedBusiness) => ({
-					id: b._id,
-					name: b.name,
-					website: b.website || '',
-					location: b.location || '',
-					distance: '',
-					isBadLead: b.isBadLead,
-					notes: b.notes || '',
-					careerLink: b.careerLink || '',
-				}))
+	const exportCSV = async () => {
+		try {
+			// Create a filename based on current filters
+			const filename = filterRecentOnly
+				? 'recent_businesses_24h.csv'
+				: 'all_businesses.csv';
+
+			// Use the existing API client to fetch all businesses with current filters
+			const data = await apiRequest(
+				'GET',
+				`/api/my/businesses?page=1&limit=10000&search=${encodeURIComponent(
+					searchTerm
+				)}&recentOnly=${filterRecentOnly}`
 			);
 
-			downloadCSV(csvContent, 'master_business_list.csv');
+			const businesses = data.businesses || [];
+
+			if (businesses.length > 0) {
+				const csvContent = exportToCSV(
+					businesses.map((b: SavedBusiness) => ({
+						id: b._id,
+						name: b.name,
+						website: b.website || '',
+						location: b.location || '',
+						distance: '',
+						isBadLead: b.isBadLead,
+						notes: b.notes || '',
+						careerLink: b.careerLink || '',
+					}))
+				);
+
+				downloadCSV(csvContent, filename);
+
+				toast({
+					title: 'Export Successful',
+					description: `Exported ${businesses.length} businesses to ${filename}`,
+				});
+			} else {
+				toast({
+					title: 'No Data to Export',
+					description:
+						'No businesses found matching your current filters.',
+					variant: 'destructive',
+				});
+			}
+		} catch (error) {
+			console.error('Export error:', error);
+			toast({
+				title: 'Export Failed',
+				description: `Failed to export businesses: ${
+					error instanceof Error ? error.message : 'Unknown error'
+				}`,
+				variant: 'destructive',
+			});
 		}
 	};
 
@@ -484,9 +522,8 @@ export default function AccountPortal() {
 				<CardHeader>
 					<CardTitle>My Company List</CardTitle>
 					<CardDescription>
-						Total: {filteredBusinesses.length} companies
-						{savedBusinesses &&
-							` (${savedBusinesses.length} total)`}
+						Total: {totalBusinesses} companies
+						{filterRecentOnly && ` (recent only)`}
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
@@ -529,7 +566,7 @@ export default function AccountPortal() {
 								Retry
 							</Button>
 						</div>
-					) : filteredBusinesses.length === 0 ? (
+					) : savedBusinesses.length === 0 ? (
 						<div className='text-center p-8'>
 							<p className='text-muted-foreground mb-4'>
 								{savedBusinesses?.length === 0
@@ -546,7 +583,10 @@ export default function AccountPortal() {
 										size='sm'
 										onClick={exportCSV}>
 										<Download className='w-4 h-4 mr-2' />
-										Export CSV
+										Export CSV{' '}
+										{filterRecentOnly
+											? '(Recent Only)'
+											: '(All)'}
 									</Button>
 
 									<Dialog>
@@ -761,9 +801,12 @@ export default function AccountPortal() {
 
 																// Refresh the data
 																queryClient.invalidateQueries(
-																	[
-																		'/api/my/businesses',
-																	]
+																	{
+																		queryKey:
+																			[
+																				'/api/my/businesses',
+																			],
+																	}
 																);
 															} else {
 																throw new Error(
