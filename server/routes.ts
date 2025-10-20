@@ -42,6 +42,7 @@ import {
 	saveCachedSearchResult,
 	getCachedSearchResult,
 	cleanupExpiredCachedResults,
+	cleanupDuplicateBusinesses,
 	getDemoApiKeys,
 	isDemoModeEnabled,
 	incrementDemoSearchCount,
@@ -1550,12 +1551,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 			const page = parseInt(req.query.page as string) || 1;
 			const limit = parseInt(req.query.limit as string) || 50;
 			const searchTerm = req.query.search as string;
+			const recentOnly = req.query.recentOnly === 'true';
 
 			const result = await getSavedBusinesses(
 				userId,
 				page,
 				limit,
-				searchTerm
+				searchTerm,
+				recentOnly
 			);
 			res.json(result);
 		} catch (error) {
@@ -1661,8 +1664,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 			const businessId = req.params.id;
 
 			// Get user's businesses and find the one with matching ID
-			const userBusinesses = await getSavedBusinesses(userId);
-			const business = userBusinesses.find((b) => b._id === businessId);
+			const userBusinessesData = await getSavedBusinesses(
+				userId,
+				1,
+				10000
+			); // Get all businesses
+			const business = userBusinessesData.businesses.find(
+				(b) => b._id === businessId
+			);
 
 			if (!business) {
 				return res.status(404).json({ message: 'Business not found' });
@@ -1690,6 +1699,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 			});
 		}
 	});
+
+	// Cleanup duplicate businesses for authenticated user
+	app.post(
+		'/api/my/businesses/cleanup-duplicates',
+		authenticate,
+		async (req, res) => {
+			try {
+				const userId = req.user!.userId;
+				const result = await cleanupDuplicateBusinesses(userId);
+				res.json({
+					message: `Cleanup completed. Removed ${result.removed} duplicate businesses.`,
+					removed: result.removed,
+					duplicates: result.duplicates,
+				});
+			} catch (error) {
+				console.error('Error cleaning up duplicates:', error);
+				res.status(500).json({
+					message: 'An error occurred while cleaning up duplicates',
+				});
+			}
+		}
+	);
 
 	// Import businesses from search results (works for both authenticated users and guests)
 	app.post(
@@ -2105,22 +2136,134 @@ export async function registerRoutes(app: Express): Promise<Server> {
 						);
 					}
 
-					// Clear existing in-memory storage and load cached results
+					// Get user's saved businesses for duplicate detection (even for cached results)
+					let userSavedBusinesses: any[] = [];
+					if (req.user && req.user.userId) {
+						try {
+							const savedBusinessesData =
+								await getSavedBusinesses(
+									req.user.userId,
+									1,
+									10000 // Get all businesses for duplicate detection
+								);
+							userSavedBusinesses =
+								savedBusinessesData.businesses;
+							console.log(
+								`Found ${userSavedBusinesses.length} saved businesses for user ${req.user.userId} (cached results)`
+							);
+						} catch (err) {
+							console.error(
+								'Error fetching saved businesses for cached duplicate check:',
+								err
+							);
+						}
+					}
+
+					// Clear existing in-memory storage and load cached results with duplicate detection
 					await storage.clearAllBusinesses();
-					const businessesToStore = cachedResult.businesses.map(
-						(b) => ({
-							name: b.name,
-							website: b.website || '',
-							location: b.location,
-							distance: b.distance,
-							isBadLead: b.isBadLead,
-							notes: b.notes,
-							careerLink: b.careerLink,
-						})
-					);
+
+					// Apply duplicate detection to cached results
+					const businessesWithDuplicates =
+						cachedResult.businesses.map((b) => {
+							let isDuplicate = false;
+
+							if (userSavedBusinesses.length > 0) {
+								isDuplicate = userSavedBusinesses.some(
+									(savedBusiness) => {
+										// Enhanced normalization functions (same as fresh search)
+										const normalizeUrl = (url: string) => {
+											if (!url) return '';
+											return url
+												.toLowerCase()
+												.replace(/^https?:\/\//i, '')
+												.replace(/^www\./i, '')
+												.replace(/\/+$/, '')
+												.split('/')[0] // Get just the domain part
+												.split('?')[0] // Remove query parameters
+												.split('#')[0]; // Remove fragments
+										};
+
+										const normalizeName = (
+											name: string
+										) => {
+											if (!name) return '';
+											return name
+												.toLowerCase()
+												.replace(/[,\.]/g, '') // Remove commas and periods
+												.replace(/\s+/g, ' ') // Normalize spaces
+												.replace(
+													/\s*(inc|llc|ltd|corp|corporation|co|company)\s*\.?$/i,
+													''
+												) // Remove business suffixes
+												.trim();
+										};
+
+										// Check website match - compare all possible website fields
+										const businessWebsites = [
+											b.website,
+											b.location,
+										].filter(Boolean);
+										const savedWebsites = [
+											savedBusiness.website,
+											savedBusiness.location,
+										].filter(Boolean);
+
+										for (const businessUrl of businessWebsites) {
+											for (const savedUrl of savedWebsites) {
+												const businessDomain =
+													normalizeUrl(businessUrl);
+												const savedDomain =
+													normalizeUrl(savedUrl);
+
+												if (
+													businessDomain.includes(
+														'.'
+													) &&
+													savedDomain.includes('.') &&
+													businessDomain ===
+														savedDomain
+												) {
+													return true;
+												}
+											}
+										}
+
+										// Check name match if not already duplicate
+										if (b.name && savedBusiness.name) {
+											const businessName = normalizeName(
+												b.name
+											);
+											const savedName = normalizeName(
+												savedBusiness.name
+											);
+
+											if (
+												businessName === savedName &&
+												businessName.length > 0
+											) {
+												return true;
+											}
+										}
+
+										return false;
+									}
+								);
+							}
+
+							return {
+								name: b.name,
+								website: b.website || '',
+								location: b.location,
+								distance: b.distance,
+								isBadLead: b.isBadLead,
+								notes: b.notes,
+								careerLink: b.careerLink,
+								isDuplicate: isDuplicate,
+							};
+						});
 
 					const savedBusinesses = await storage.saveBatchBusinesses(
-						businessesToStore
+						businessesWithDuplicates
 					);
 
 					return res.json({
@@ -2308,9 +2451,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 				let userSavedBusinesses: any[] = [];
 				if (req.user && req.user.userId) {
 					try {
-						userSavedBusinesses = await getSavedBusinesses(
-							req.user.userId
+						const savedBusinessesData = await getSavedBusinesses(
+							req.user.userId,
+							1,
+							10000 // Get all businesses for duplicate detection
 						);
+						userSavedBusinesses = savedBusinessesData.businesses;
 						console.log(
 							`Found ${userSavedBusinesses.length} saved businesses for user ${req.user.userId}`
 						);
@@ -2325,35 +2471,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
 				// Clear ALL previous search results before saving new ones
 				await storage.clearAllBusinesses();
 
-				// Store the results for later retrieval (this will be the only results in storage)
-				const savedBusinesses = await storage.saveBatchBusinesses(
-					businesses
-				);
+				// Mark duplicates BEFORE storing them
+				const businessesWithDuplicates = businesses.map((business) => {
+					let isDuplicate = false;
 
-				// For marking duplicates based on user's saved businesses
-				if (userSavedBusinesses.length > 0) {
-					for (const business of savedBusinesses) {
-						const isDuplicate = userSavedBusinesses.some(
+					if (userSavedBusinesses.length > 0) {
+						isDuplicate = userSavedBusinesses.some(
 							(savedBusiness) => {
 								// Check website match (normalize domains first)
-								if (business.website && savedBusiness.website) {
-									const normalizeUrl = (url: string) => {
-										return url
-											.toLowerCase()
-											.replace(/^https?:\/\//i, '')
-											.replace(/^www\./i, '')
-											.replace(/\/+$/, '');
-									};
+								const normalizeUrl = (url: string) => {
+									if (!url) return '';
+									return url
+										.toLowerCase()
+										.replace(/^https?:\/\//i, '')
+										.replace(/^www\./i, '')
+										.replace(/\/+$/, '')
+										.split('/')[0] // Get just the domain part
+										.split('?')[0] // Remove query parameters
+										.split('#')[0]; // Remove fragments
+								};
 
-									const businessDomain = normalizeUrl(
-										business.website
-									);
-									const savedDomain = normalizeUrl(
-										savedBusiness.website
-									);
+								// Check website match - compare all possible website fields
+								const businessWebsites = [
+									business.website,
+									business.location, // Sometimes website is in location field
+								].filter(Boolean);
 
-									if (businessDomain === savedDomain)
-										return true;
+								const savedWebsites = [
+									savedBusiness.website,
+									savedBusiness.location, // Sometimes website is in location field
+								].filter(Boolean);
+
+								for (const businessUrl of businessWebsites) {
+									for (const savedUrl of savedWebsites) {
+										const businessDomain =
+											normalizeUrl(businessUrl);
+										const savedDomain =
+											normalizeUrl(savedUrl);
+
+										// Check if both are valid domains (contain a dot)
+										if (
+											businessDomain.includes('.') &&
+											savedDomain.includes('.')
+										) {
+											if (
+												businessDomain === savedDomain
+											) {
+												return true;
+											}
+										}
+									}
 								}
 
 								// Check name match (normalize company names)
@@ -2361,8 +2528,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 									const normalizeName = (name: string) => {
 										return name
 											.toLowerCase()
+											.replace(/[,\.]/g, '') // Remove commas and periods
+											.replace(/\s+/g, ' ') // Normalize spaces
 											.replace(
-												/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i,
+												/\s*(inc|llc|ltd|corp|corporation|co|company)\s*\.?$/i,
 												''
 											)
 											.trim();
@@ -2487,23 +2656,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 								return false;
 							}
 						);
-
-						// Update the business with isDuplicate flag if it's a duplicate
-						if (isDuplicate && business.id) {
-							await storage.updateBusiness(business.id, {
-								isDuplicate: true,
-							});
-						}
 					}
-				} else {
-					// Fall back to the regular duplicate check with stored businesses
-					await storage.checkForDuplicates(savedBusinesses);
-				}
 
-				// Get the updated businesses with duplicate flags
-				const updatedBusinesses = await storage.getBusinesses();
-				const newBusinesses = updatedBusinesses.filter((b) =>
-					savedBusinesses.some((saved) => saved.id === b.id)
+					return { ...business, isDuplicate };
+				});
+
+				// Store the results with duplicate flags
+				const savedBusinesses = await storage.saveBatchBusinesses(
+					businessesWithDuplicates
 				);
 
 				// Save results to persistent cache for future searches
@@ -2516,7 +2676,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 							radius: Number(radius),
 							maxResults: Number(maxResults),
 						},
-						businesses: newBusinesses.map((b) => ({
+						businesses: savedBusinesses.map((b) => ({
 							name: b.name,
 							website: b.website || '',
 							location: b.location,
@@ -2524,8 +2684,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 							isBadLead: b.isBadLead,
 							notes: b.notes,
 							careerLink: b.careerLink,
+							isDuplicate: b.isDuplicate,
 						})),
-						totalResults: newBusinesses.length,
+						totalResults: savedBusinesses.length,
 						userId: req.user?.userId, // Optional user association
 					});
 					console.log(
@@ -2542,8 +2703,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 				// Guest results will only be saved when "Add to my company list" is clicked
 
 				res.json({
-					businesses: newBusinesses,
-					total: newBusinesses.length,
+					businesses: savedBusinesses,
+					total: savedBusinesses.length,
 					cached: false,
 					isGuest: !!req.guest?.guestId,
 					searchesRemaining: req.guest?.guestId
@@ -2841,6 +3002,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 			// Enforce limits for performance - hard limits
 			const limitedMaxCities = Math.min(maxCities, 5); // Maximum 5 cities for optimal performance
 			const limitedMaxResults = 50; // Maximum results to return per search
+			const maxResults = 50; // For compliance reporting
 
 			// Generate search fingerprint for caching
 			const searchFingerprint = generateSearchFingerprint({

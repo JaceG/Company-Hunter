@@ -22,11 +22,7 @@ import {
 	useImportBusinesses,
 	useClearAllBusinesses,
 } from '@/hooks/useBusiness';
-import {
-	useImportFromSearch,
-	useSavedBusinesses,
-	useGuestBusinesses,
-} from '@/hooks/useSavedBusinesses';
+import { useImportFromSearch } from '@/hooks/useSavedBusinesses';
 import { useAuth } from '@/hooks/useAuth';
 import { queryClient } from '@/lib/queryClient';
 
@@ -48,63 +44,13 @@ export default function ResultsPanel({
 	const [hideDuplicates, setHideDuplicates] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const importFromSearch = useImportFromSearch();
-	const { data: savedBusinessesData } = useSavedBusinesses(1, 5000); // Load more businesses for duplicate detection
-	const { data: guestBusinessesData } = useGuestBusinesses(); // Load guest businesses for duplicate detection
 	const { user } = useAuth();
 	const clearAllBusinesses = useClearAllBusinesses();
 
-	// Check for duplicates against saved businesses (for authenticated users) or guest businesses (for guests)
-	const duplicateCheckData = user
-		? savedBusinessesData?.businesses
-		: guestBusinessesData?.businesses;
-
+	// Use server-provided isDuplicate flag instead of client-side detection
 	const businessesWithDuplicateDetection = businesses.map((business) => {
-		const isDuplicate =
-			duplicateCheckData?.some((savedBusiness: any) => {
-				// Check website match
-				if (business.website && savedBusiness.website) {
-					const normalizeUrl = (url: string) => {
-						return url
-							.toLowerCase()
-							.replace(/^https?:\/\//i, '')
-							.replace(/^www\./i, '')
-							.replace(/\/+$/, '');
-					};
-
-					const businessDomain = normalizeUrl(business.website);
-					const savedDomain = normalizeUrl(savedBusiness.website);
-
-					if (businessDomain === savedDomain) {
-						return true;
-					}
-				}
-
-				// Check name match
-				if (business.name && savedBusiness.name) {
-					const normalizeName = (name: string) => {
-						return name
-							.toLowerCase()
-							.replace(
-								/\s*(inc|llc|ltd|corp|corporation)\s*\.?$/i,
-								''
-							)
-							.trim();
-					};
-
-					const businessName = normalizeName(business.name);
-					const savedName = normalizeName(savedBusiness.name);
-
-					if (businessName === savedName) {
-						return true;
-					}
-				}
-
-				return false;
-			}) || false;
-
-		// Debug logging removed for production
-
-		return { ...business, isDuplicate };
+		// The server now provides the isDuplicate flag, so we use that directly
+		return { ...business, isDuplicate: business.isDuplicate || false };
 	});
 
 	// Filter out duplicates if the toggle is on

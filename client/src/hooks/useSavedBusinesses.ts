@@ -15,10 +15,11 @@ export interface SavedBusiness extends Omit<Business, 'id'> {
 export function useSavedBusinesses(
 	page: number = 1,
 	limit: number = 50,
-	searchTerm?: string
+	searchTerm?: string,
+	recentOnly?: boolean
 ) {
 	return useQuery({
-		queryKey: ['/api/my/businesses', page, limit, searchTerm],
+		queryKey: ['/api/my/businesses', page, limit, searchTerm, recentOnly],
 		queryFn: async () => {
 			const params = new URLSearchParams({
 				page: page.toString(),
@@ -26,6 +27,9 @@ export function useSavedBusinesses(
 			});
 			if (searchTerm && searchTerm.trim()) {
 				params.append('search', searchTerm.trim());
+			}
+			if (recentOnly) {
+				params.append('recentOnly', 'true');
 			}
 			return await apiRequest('GET', `/api/my/businesses?${params}`);
 		},

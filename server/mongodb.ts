@@ -293,7 +293,8 @@ export async function getSavedBusinesses(
 	userId: string,
 	page: number = 1,
 	limit: number = 50,
-	searchTerm?: string
+	searchTerm?: string,
+	recentOnly?: boolean
 ): Promise<{
 	businesses: SavedBusiness[];
 	total: number;
@@ -318,14 +319,20 @@ export async function getSavedBusinesses(
 		];
 	}
 
+	// Add recent only filter (last 24 hours)
+	if (recentOnly) {
+		const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+		filter.createdAt = { $gte: twentyFourHoursAgo };
+	}
+
 	// Get total count for pagination with search filter
 	const total = await businessCollection.countDocuments(filter);
 	const totalPages = Math.ceil(total / limit);
 
-	// Find all businesses for this user with pagination and search
+	// Find all businesses for this user with pagination and search, sorted by date (newest first)
 	const businesses = await businessCollection
 		.find(filter)
-		.sort({ name: 1 })
+		.sort({ createdAt: -1 }) // Sort by date added, newest first
 		.skip(skip)
 		.limit(limit)
 		.toArray();
@@ -1108,6 +1115,141 @@ export async function cleanupExpiredCachedResults(): Promise<number> {
 	} catch (error) {
 		console.error('Error cleaning up expired cached results:', error);
 		return 0;
+	}
+}
+
+export async function cleanupDuplicateBusinesses(
+	userId: string
+): Promise<{ removed: number; duplicates: any[] }> {
+	try {
+		const database = await connectToMongoDB();
+		const businessCollection = database.collection<SavedBusiness>(
+			COLLECTIONS.SAVED_BUSINESSES
+		);
+
+		// Get all businesses for this user
+		const allBusinesses = await businessCollection
+			.find({ userId })
+			.toArray();
+
+		// Enhanced normalization functions
+		const normalizeUrl = (url: string) => {
+			if (!url) return '';
+			return url
+				.toLowerCase()
+				.replace(/^https?:\/\//i, '')
+				.replace(/^www\./i, '')
+				.replace(/\/+$/, '')
+				.split('/')[0] // Get just the domain part
+				.split('?')[0] // Remove query parameters
+				.split('#')[0]; // Remove fragments
+		};
+
+		const normalizeName = (name: string) => {
+			if (!name) return '';
+			return name
+				.toLowerCase()
+				.replace(/[,\.]/g, '') // Remove commas and periods
+				.replace(/\s+/g, ' ') // Normalize spaces
+				.replace(
+					/\s*(inc|llc|ltd|corp|corporation|co|company)\s*\.?$/i,
+					''
+				) // Remove business suffixes
+				.trim();
+		};
+
+		const duplicates: any[] = [];
+		const toRemove: string[] = [];
+
+		// Find duplicates
+		for (let i = 0; i < allBusinesses.length; i++) {
+			const business = allBusinesses[i];
+			if (toRemove.includes(business._id!.toString())) continue;
+
+			for (let j = i + 1; j < allBusinesses.length; j++) {
+				const otherBusiness = allBusinesses[j];
+				if (toRemove.includes(otherBusiness._id!.toString())) continue;
+
+				let isDuplicate = false;
+
+				// Check website match - compare all possible website fields
+				const businessWebsites = [
+					business.website,
+					business.location,
+				].filter(Boolean);
+				const otherWebsites = [
+					otherBusiness.website,
+					otherBusiness.location,
+				].filter(Boolean);
+
+				for (const businessUrl of businessWebsites) {
+					for (const otherUrl of otherWebsites) {
+						const businessDomain = normalizeUrl(businessUrl);
+						const otherDomain = normalizeUrl(otherUrl);
+
+						if (
+							businessDomain.includes('.') &&
+							otherDomain.includes('.') &&
+							businessDomain === otherDomain
+						) {
+							isDuplicate = true;
+							break;
+						}
+					}
+					if (isDuplicate) break;
+				}
+
+				// Check name match if not already duplicate
+				if (!isDuplicate && business.name && otherBusiness.name) {
+					const businessName = normalizeName(business.name);
+					const otherName = normalizeName(otherBusiness.name);
+
+					if (businessName === otherName && businessName.length > 0) {
+						isDuplicate = true;
+					}
+				}
+
+				if (isDuplicate) {
+					// Keep the older one (smaller createdAt or _id)
+					const keepBusiness =
+						business.createdAt && otherBusiness.createdAt
+							? business.createdAt < otherBusiness.createdAt
+								? business
+								: otherBusiness
+							: business._id! < otherBusiness._id!
+							? business
+							: otherBusiness;
+
+					const removeBusiness =
+						keepBusiness === business ? otherBusiness : business;
+
+					duplicates.push({
+						keep: keepBusiness,
+						remove: removeBusiness,
+						reason: 'Duplicate detected',
+					});
+
+					toRemove.push(removeBusiness._id!.toString());
+				}
+			}
+		}
+
+		// Remove duplicates
+		if (toRemove.length > 0) {
+			const result = await businessCollection.deleteMany({
+				_id: { $in: toRemove.map((id) => new ObjectId(id)) },
+			});
+
+			console.log(
+				`Removed ${result.deletedCount} duplicate businesses for user ${userId}`
+			);
+			return { removed: result.deletedCount, duplicates };
+		}
+
+		return { removed: 0, duplicates };
+	} catch (error) {
+		console.error('Error cleaning up duplicate businesses:', error);
+		return { removed: 0, duplicates: [] };
 	}
 }
 
