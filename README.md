@@ -31,6 +31,8 @@ When you're ready for unlimited access:
 3. Set up your own API keys for unlimited searches
 4. Access advanced features like custom lists and permanent data storage
 
+![Business Search Tool Screenshot](attached_assets/screenshot.png)
+
 ## Overview
 CompanyHunter is a comprehensive business search application that helps users find potential business leads using Google Places API. It supports both demo mode for instant access and full user accounts with individual API key management, intelligent search caching, and comprehensive business management capabilities.
 
